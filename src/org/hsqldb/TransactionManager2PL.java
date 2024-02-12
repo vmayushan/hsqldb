@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -121,15 +121,15 @@ implements TransactionManager {
 
     public void rollback(Session session) {
 
-        session.abortTransaction        = false;
-        session.actionTimestamp         = getNextGlobalChangeTimestamp();
-        session.transactionEndTimestamp = session.actionTimestamp;
-
-        rollbackPartial(session, 0, session.transactionTimestamp);
-        endTransaction(session);
         writeLock.lock();
 
         try {
+            session.abortTransaction        = false;
+            session.actionTimestamp         = getNextGlobalChangeTimestamp();
+            session.transactionEndTimestamp = session.actionTimestamp;
+
+            rollbackPartial(session, 0, session.transactionTimestamp);
+            endTransaction(session);
             endTransactionTPL(session);
         } finally {
             writeLock.unlock();
@@ -232,6 +232,13 @@ implements TransactionManager {
         }
 
         store.indexRow(session, row);
+
+        if (table.persistenceScope == Table.SCOPE_ROUTINE) {
+            row.rowAction = null;
+
+            return;
+        }
+
         session.rowActionList.add(action);
 
         row.rowAction = null;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,46 +29,15 @@
  */
 
 
-package org.hsqldb.test;
+package org.hsqldb.persist;
 
-public class AllSimpleTests {
+public interface EventLogInterface {
 
-    public AllSimpleTests() {
+    void logSevereEvent(String message, Throwable t);
 
-        try {
-            jbInit();
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-    }
+    void logWarningEvent(String message, Throwable t);
 
-    String[] args = new String[0];
+    void logInfoEvent(String message);
 
-    void doTests() throws Exception {
-
-        System.out.println("*********** " + HSQLBug.class.getName());
-        HSQLBug.main(args);
-        System.out.println("*********** "
-                           + TestBatchBug.class.getClass().getName());
-        TestBatchBug.main(args);
-        System.out.println("*********** " + TestDima.class.getName());
-        TestDima.main(args);
-        System.out.println("*********** " + TestHSQLDB.class.getName());
-        TestHSQLDB.main(args);
-        System.out.println("*********** " + TestObjectSize.class.getName());
-        TestObjectSize.main(args);
-        System.out.println(
-            "*********** "
-            + TestSubQueriesInPreparedStatements.class.getName());
-        TestSubQueriesInPreparedStatements.main(args);
-    }
-
-    public static void main(String[] Args) throws Exception {
-
-        AllSimpleTests ast = new AllSimpleTests();
-
-        ast.doTests();
-    }
-
-    private void jbInit() throws Exception {}
+    void logDetailEvent(String message);
 }

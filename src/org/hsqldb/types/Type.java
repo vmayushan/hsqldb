@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,7 +50,7 @@ import org.hsqldb.rights.Grantee;
  * Base class for type objects.<p>
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public abstract class Type implements SchemaObject, Cloneable {
@@ -358,6 +358,10 @@ public abstract class Type implements SchemaObject, Cloneable {
                || typeComparisonGroup == otherType.typeComparisonGroup;
     }
 
+    public boolean canCompareDirect(Type otherType) {
+        return typeComparisonGroup == otherType.typeComparisonGroup;
+    }
+
     public int arrayLimitCardinality() {
         return 0;
     }
@@ -450,6 +454,10 @@ public abstract class Type implements SchemaObject, Cloneable {
         return userTypeModifier == null ? false
                                         : userTypeModifier.schemaObjectType
                                           == SchemaObject.DOMAIN;
+    }
+
+    public int getDegree() {
+        return 1;
     }
 
     public boolean acceptsPrecision() {
@@ -776,11 +784,11 @@ public abstract class Type implements SchemaObject, Cloneable {
                                      DTIType.maxIntervalPrecision, 0);
     public static final IntervalType SQL_INTERVAL_SECOND_MAX_PRECISION =
         IntervalType.newIntervalType(Types.SQL_INTERVAL_SECOND,
-                                     DTIType.maxIntervalPrecision,
+                                     DTIType.maxIntervalSecondPrecision,
                                      DTIType.defaultIntervalFractionPrecision);
     public static final IntervalType SQL_INTERVAL_SECOND_MAX_FRACTION_MAX_PRECISION =
         IntervalType.newIntervalType(Types.SQL_INTERVAL_SECOND,
-                                     DTIType.maxIntervalPrecision,
+                                     DTIType.maxIntervalSecondPrecision,
                                      DTIType.maxFractionPrecision);
 
     //
@@ -1030,7 +1038,6 @@ public abstract class Type implements SchemaObject, Cloneable {
             case Types.SQL_ALL_TYPES :
                 return SQL_ALL_TYPES;
 
-//                return SQL_ALL_TYPES; // needs changes to Expression type resolution
             case Types.SQL_CHAR :
             case Types.SQL_VARCHAR :
             case Types.SQL_CLOB :

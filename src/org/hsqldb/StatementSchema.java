@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ import org.hsqldb.types.Type;
  * Implementation of Statement for DDL statements.<p>
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class StatementSchema extends Statement {
@@ -914,8 +914,8 @@ public class StatementSchema extends Statement {
                     }
 
                     if (grant) {
-                        gm.grant(granteeList, schemaObject, right, grantor,
-                                 isGrantOption);
+                        gm.grant(session, granteeList, schemaObject, right,
+                                 grantor, isGrantOption);
                     } else {
                         gm.revoke(granteeList, schemaObject, right, grantor,
                                   isGrantOption, cascade);
@@ -1148,8 +1148,9 @@ public class StatementSchema extends Statement {
             case StatementTypes.CREATE_TABLE : {
                 Table         table              = (Table) arguments[0];
                 HsqlArrayList tempConstraints = (HsqlArrayList) arguments[1];
-                StatementDMQL statement = (StatementDMQL) arguments[2];
-                Boolean       ifNotExists        = (Boolean) arguments[3];
+                HsqlArrayList tempIndexes = (HsqlArrayList) arguments[2];
+                StatementDMQL statement = (StatementDMQL) arguments[3];
+                Boolean       ifNotExists        = (Boolean) arguments[4];
                 HsqlArrayList foreignConstraints = null;
 
                 try {
@@ -1178,8 +1179,25 @@ public class StatementSchema extends Statement {
                     table.compile(session, null);
                     schemaManager.addSchemaObject(table);
 
+                    if (tempIndexes != null) {
+                        TableWorks tableWorks = new TableWorks(session, table);
+
+                        for (int i = 0; i < tempIndexes.size(); i++) {
+                            Constraint c = (Constraint) tempIndexes.get(i);
+
+                            tableWorks.addIndex(c.getMainColumns(),
+                                                c.getName(), false);
+                        }
+
+                        table = tableWorks.getTable();
+                    }
+
                     if (statement != null) {
                         Result result = statement.execute(session);
+
+                        if (result.isError()) {
+                            return result;
+                        }
 
                         table.insertIntoTable(session, result);
                     }

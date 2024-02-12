@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,10 +49,10 @@ import org.hsqldb.lib.java.JavaSystem;
  * A collection of file management methods.<p>
  * Also provides the default FileAccess implementation
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
  * @author Ocke Janssen oj@openoffice.org
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.7.2
  */
 public class FileUtil implements FileAccess {
@@ -72,12 +72,12 @@ public class FileUtil implements FileAccess {
                           : (FileAccess) fileUtil;
     }
 
-    public boolean isStreamElement(java.lang.String elementName) {
+    public boolean isStreamElement(String elementName) {
         return new File(elementName).exists();
     }
 
-    public InputStream openInputStreamElement(java.lang.String streamName)
-    throws java.io.IOException {
+    public InputStream openInputStreamElement(String streamName)
+    throws IOException {
 
         try {
             return new FileInputStream(new File(streamName));
@@ -97,14 +97,13 @@ public class FileUtil implements FileAccess {
         }
     }
 
-    public void renameElement(java.lang.String oldName,
-                              java.lang.String newName) {
+    public void renameElement(String oldName, String newName) {
         renameWithOverwrite(oldName, newName);
     }
 
-    public java.io.OutputStream openOutputStreamElement(
-            java.lang.String streamName) throws java.io.IOException {
-        return new FileOutputStream(new File(streamName));
+    public OutputStream openOutputStreamElement(String streamName)
+    throws IOException {
+        return new FileOutputStream(new File(streamName), true);
     }
 
     // end of FileAccess implementation
@@ -305,7 +304,7 @@ public class FileUtil implements FileAccess {
     }
 
     public FileAccess.FileSync getFileSync(java.io.OutputStream os)
-    throws java.io.IOException {
+    throws IOException {
         return new FileSync((FileOutputStream) os);
     }
 
@@ -375,14 +374,13 @@ public class FileUtil implements FileAccess {
             return fis;
         }
 
-        public void createParentDirs(java.lang.String filename) {}
+        public void createParentDirs(String filename) {}
 
-        public void removeElement(java.lang.String filename) {}
+        public void removeElement(String filename) {}
 
-        public void renameElement(java.lang.String oldName,
-                                  java.lang.String newName) {}
+        public void renameElement(String oldName, String newName) {}
 
-        public java.io.OutputStream openOutputStreamElement(String streamName)
+        public OutputStream openOutputStreamElement(String streamName)
         throws IOException {
             throw new IOException();
         }

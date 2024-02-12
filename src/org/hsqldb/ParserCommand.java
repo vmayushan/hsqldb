@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,7 +50,7 @@ import org.hsqldb.types.Types;
  * Parser for session and management statements
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class ParserCommand extends ParserDDL {
@@ -183,6 +183,11 @@ public class ParserCommand extends ParserDDL {
             }
             case Tokens.TRUNCATE : {
                 cs = compileTruncateStatement();
+
+                break;
+            }
+            case Tokens.REPLACE : {
+                cs = compileInsertStatement(RangeGroup.emptyArray);
 
                 break;
             }
@@ -337,7 +342,7 @@ public class ParserCommand extends ParserDDL {
             return cs;
         }
 
-        cs = compileDeclareCursor(RangeGroup.emptyArray, false);
+        cs = compileDeclareCursorOrNull(RangeGroup.emptyArray, false);
 
         if (cs == null) {
             throw lastError == null ? unexpectedToken()
@@ -430,11 +435,12 @@ public class ParserCommand extends ParserDDL {
                 read();
                 readThis(Tokens.TYPE);
 
-                int type = TableBase.MEMORY_TABLE;
+                int type;
 
                 switch (token.tokenType) {
 
                     case Tokens.MEMORY :
+                        type = TableBase.MEMORY_TABLE;
                         break;
 
                     case Tokens.CACHED :
@@ -725,11 +731,12 @@ public class ParserCommand extends ParserDDL {
                 readThis(Tokens.TABLE);
                 readThis(Tokens.TYPE);
 
-                int type = TableBase.MEMORY_TABLE;
+                int type;
 
                 switch (token.tokenType) {
 
                     case Tokens.MEMORY :
+                        type = TableBase.MEMORY_TABLE;
                         break;
 
                     case Tokens.CACHED :
@@ -840,8 +847,6 @@ public class ParserCommand extends ParserDDL {
                 return compileSetProperty();
             }
             default : {
-                rewind(position);
-
                 return compileSetStatement(
                     session.sessionContext.sessionVariableRangeGroups,
                     session.sessionContext.sessionVariablesRange);
@@ -921,12 +926,28 @@ public class ParserCommand extends ParserDDL {
 
                 int newType;
 
-                if (token.tokenType == Tokens.CACHED) {
-                    newType = TableBase.CACHED_TABLE;
-                } else if (token.tokenType == Tokens.MEMORY) {
-                    newType = TableBase.MEMORY_TABLE;
-                } else {
-                    throw unexpectedToken();
+                switch (token.tokenType) {
+
+                    case Tokens.MEMORY :
+                        newType = TableBase.MEMORY_TABLE;
+                        break;
+
+                    case Tokens.CACHED :
+                        newType = TableBase.CACHED_TABLE;
+                        break;
+
+                    default :
+                        throw unexpectedToken();
+                }
+
+                switch (table.getTableType()) {
+
+                    case TableBase.MEMORY_TABLE :
+                    case TableBase.CACHED_TABLE :
+                        break;
+
+                    default :
+                        throw unexpectedToken();
                 }
 
                 read();
@@ -1405,6 +1426,25 @@ public class ParserCommand extends ParserDDL {
 
         switch (token.tokenType) {
 
+            case Tokens.CHECK : {
+                read();
+
+                long longValue = readBigint();
+
+                type  = StatementTypes.SET_DATABASE_FILES_CHECK;
+                names = database.schemaManager.getCatalogNameArray();
+
+                if (readIfThis(Tokens.COMMA)) {
+                    readBigint();
+                }
+
+                Object[] args = new Object[2];
+
+                args[0] = Long.valueOf(longValue);
+                args[1] = Long.valueOf(0);
+
+                return new StatementCommand(type, args, null, names);
+            }
             case Tokens.CACHE : {
                 read();
 
@@ -1423,15 +1463,6 @@ public class ParserCommand extends ParserDDL {
 
                     mode = Boolean.TRUE;
                 }
-
-                break;
-            }
-            case Tokens.CHECK : {
-                read();
-
-                value = readIntegerObject();
-                type  = StatementTypes.SET_DATABASE_FILES_CHECK;
-                names = database.schemaManager.getCatalogNameArray();
 
                 break;
             }
@@ -1750,7 +1781,31 @@ public class ParserCommand extends ParserDDL {
     private Statement compileLock() {
 
         read();
-        readThis(Tokens.TABLE);
+
+        if (readIfThis(Tokens.CATALOG)) {
+            return compileLockCatalog();
+        } else {
+            readThis(Tokens.TABLE);
+
+            return compileLockTable();
+        }
+    }
+
+    private Statement compileLockCatalog() {
+
+        boolean isLock    = processTrueOrFalse();
+        int statementType = isLock ? StatementTypes.TRANSACTION_LOCK_CATALOG
+                                   : StatementTypes.TRANSACTION_UNLOCK_CATALOG;
+        HsqlName[] writeTableNames =
+            isLock ? database.schemaManager.getCatalogAndBaseTableNames()
+                   : null;
+        Statement cs = new StatementSession(statementType, null,
+                                            writeTableNames);
+
+        return cs;
+    }
+
+    private Statement compileLockTable() {
 
         OrderedHashSet readSet  = new OrderedHashSet();
         OrderedHashSet writeSet = new OrderedHashSet();
@@ -1933,6 +1988,18 @@ public class ParserCommand extends ParserDDL {
 
                 return new StatementSession(
                     StatementTypes.SET_SESSION_RESULT_MEMORY_ROWS, args);
+            }
+            case Tokens.FEATURE : {
+                read();
+
+                String   feature = parseSQLFeatureValue();
+                Boolean  value   = processTrueOrFalseObject();
+                Object[] args    = new Object[] {
+                    feature, value
+                };
+
+                return new StatementSession(StatementTypes.SET_SESSION_FEATURE,
+                                            args);
             }
             default :
                 throw unexpectedToken();

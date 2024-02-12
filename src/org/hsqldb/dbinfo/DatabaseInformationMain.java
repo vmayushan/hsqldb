@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -69,7 +69,7 @@ import org.hsqldb.types.NumberType;
 import org.hsqldb.types.Type;
 import org.hsqldb.types.Types;
 
-/* $Id: DatabaseInformationMain.java 5342 2014-01-25 17:51:22Z fredt $ */
+/* $Id: DatabaseInformationMain.java 5487 2015-06-06 16:15:53Z fredt $ */
 
 // fredt@users - 1.7.2 - structural modifications to allow inheritance
 // boucherb@users - 1.7.2 - 20020225
@@ -141,9 +141,9 @@ import org.hsqldb.types.Types;
  * object or it is out of date, the table contents are cleared and rebuilt. <p>
  *
  * (fredt@users) <p>
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.7.2
  */
 class DatabaseInformationMain extends DatabaseInformation {
@@ -189,6 +189,8 @@ class DatabaseInformationMain extends DatabaseInformation {
             nonCachedTablesSet.add("SYSTEM_SESSIONS");
             nonCachedTablesSet.add("SYSTEM_PROPERTIES");
             nonCachedTablesSet.add("SYSTEM_SEQUENCES");
+            nonCachedTablesSet.add("SYSTEM_INDEXSTATS");
+            nonCachedTablesSet.add("SYSTEM_TABLESTATS");
         }
     }
 
@@ -817,7 +819,7 @@ class DatabaseInformationMain extends DatabaseInformation {
      * SCOPE_CATLOG      VARCHAR   catalog of REF attribute scope table
      * SCOPE_SCHEMA      VARCHAR   schema of REF attribute scope table
      * SCOPE_TABLE       VARCHAR   name of REF attribute scope table
-     * SOURCE_DATA_TYPE  VARCHAR   source type of REF attribute
+     * SOURCE_DATA_TYPE  SMALLINT  source type of REF attribute
      * TYPE_SUB          INTEGER   HSQLDB data subtype code
      * </pre> <p>
      *
@@ -853,7 +855,7 @@ class DatabaseInformationMain extends DatabaseInformation {
             addColumn(t, "SCOPE_CATALOG", SQL_IDENTIFIER);          // 18
             addColumn(t, "SCOPE_SCHEMA", SQL_IDENTIFIER);           // 19
             addColumn(t, "SCOPE_TABLE", SQL_IDENTIFIER);            // 20
-            addColumn(t, "SOURCE_DATA_TYPE", SQL_IDENTIFIER);       // 21
+            addColumn(t, "SOURCE_DATA_TYPE", Type.SQL_SMALLINT);    // 21
 
             // ----------------------------------------------------------------
             // JDBC 4.0 - added Mustang b86
@@ -1015,9 +1017,9 @@ class DatabaseInformationMain extends DatabaseInformation {
                 row[iis_nullable]      = column.isNullable() ? "YES"
                                                              : "NO";
 
-                if (type.isDistinctType()) {
-                    row[isource_data_type] =
-                        type.getName().getSchemaQualifiedStatementName();
+                if (type.isDistinctType() || type.isDomainType()) {
+                    row[itype_name]        = type.getTypeDefinition();
+                    row[isource_data_type] = row[idata_type];
                 }
 
                 // JDBC 4.0
@@ -1909,7 +1911,7 @@ class DatabaseInformationMain extends DatabaseInformation {
             addColumn(t, "DESCRIPTION", SQL_IDENTIFIER);      // not null
 
             HsqlName name = HsqlNameManager.newInfoSchemaObjectName(
-                sysTableHsqlNames[SYSTEM_PRIMARYKEYS].name, false,
+                sysTableHsqlNames[SYSTEM_CONNECTION_PROPERTIES].name, false,
                 SchemaObject.INDEX);
 
             t.createPrimaryKeyConstraint(name, new int[]{ 0 }, true);
@@ -3360,7 +3362,8 @@ class DatabaseInformationMain extends DatabaseInformation {
 
             //
             HsqlName name = HsqlNameManager.newInfoSchemaObjectName(
-                sysTableHsqlNames[SEQUENCES].name, false, SchemaObject.INDEX);
+                sysTableHsqlNames[TABLE_PRIVILEGES].name, false,
+                SchemaObject.INDEX);
 
             t.createPrimaryKeyConstraint(name, new int[] {
                 0, 1, 2, 3, 4, 5, 6

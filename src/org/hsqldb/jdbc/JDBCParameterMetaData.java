@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@ import org.hsqldb.types.DateTimeType;
 import org.hsqldb.types.IntervalType;
 import org.hsqldb.types.Type;
 
-/* $Id: JDBCParameterMetaData.java 5160 2013-02-02 20:10:25Z fredt $ */
+/* $Id: JDBCParameterMetaData.java 5487 2015-06-06 16:15:53Z fredt $ */
 
 /** @todo 1.9.0 - implement internal support for INOUT, OUT return parameter */
 
@@ -66,7 +66,7 @@ import org.hsqldb.types.Type;
  * types and properties for each parameter marker in a <code>CallableStatement</code>
  * object.
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @version 2.0.1
  * @since JDK 1.4, HSQLDB 1.7.2
  * @revised JDK 1.6, HSQLDB 2.0
@@ -282,7 +282,7 @@ public class JDBCParameterMetaData
      */
 //#ifdef JAVA6
     @SuppressWarnings("unchecked")
-    public <T>T unwrap(java.lang.Class<T> iface) throws java.sql.SQLException {
+    public <T>T unwrap(Class<T> iface) throws java.sql.SQLException {
 
         if (isWrapperFor(iface)) {
             return (T) this;
@@ -310,7 +310,7 @@ public class JDBCParameterMetaData
      */
 //#ifdef JAVA6
     public boolean isWrapperFor(
-            java.lang.Class<?> iface) throws java.sql.SQLException {
+            Class<?> iface) throws java.sql.SQLException {
         return (iface != null && iface.isAssignableFrom(this.getClass()));
     }
 

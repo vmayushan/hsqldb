@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,7 @@ import org.hsqldb.persist.PersistentStore;
  * processing and which indexes are used for table access.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class RangeVariableResolver {
@@ -94,8 +94,9 @@ public class RangeVariableResolver {
     HashMap               tempMap          = new HashMap();
     MultiValueHashMap     tempMultiMap     = new MultiValueHashMap();
 
-    RangeVariableResolver(QuerySpecification select) {
+    RangeVariableResolver(Session session, QuerySpecification select) {
 
+        this.session        = session;
         this.select         = select;
         this.rangeVariables = select.rangeVariables;
         this.conditions     = select.queryCondition;
@@ -107,10 +108,11 @@ public class RangeVariableResolver {
         initialise();
     }
 
-    RangeVariableResolver(RangeVariable[] rangeVariables,
+    RangeVariableResolver(Session session, RangeVariable[] rangeVariables,
                           Expression conditions,
                           CompileContext compileContext, boolean reorder) {
 
+        this.session        = session;
         this.rangeVariables = rangeVariables;
         this.conditions     = conditions;
         this.compileContext = compileContext;
@@ -144,11 +146,15 @@ public class RangeVariableResolver {
         for (int i = 0; i < rangeVariables.length; i++) {
             whereExpressions[i] = new HsqlArrayList();
         }
+
+        queryConditions.clear();
     }
 
-    void processConditions(Session session) {
+    void processConditions() {
 
-        this.session = session;
+        if (session.sessionOptimization < 8) {
+            reorder = false;
+        }
 
         decomposeAndConditions(session, conditions, queryConditions);
 
@@ -580,17 +586,6 @@ public class RangeVariableResolver {
         array[index].add(e);
     }
 
-/**
- * if a tiny table is in the middle of the range list, then this will have no
- * effect on joins. therefore the larger tables should be put first, avoiding
- * multiple lookups
- *
- * the index selectivity should also account for the size, and account for
- * disk seek, which means finding a unique value in large tables takes a lot
- * more time than scanning a table with 10 rows.
- *
- *
- */
     void reorder() {
 
         if (!reorder) {
@@ -661,10 +656,9 @@ public class RangeVariableResolver {
             for (int j = 0; j < indexes.length; j++) {
                 index = indexes[j].index;
 
-                PersistentStore store = table.getRowStore(session);
-                double currentCost = store.searchCost(session, index,
-                                                      indexes[j].columnCount,
-                                                      OpTypes.EQUAL);
+                double currentCost = searchCost(session, table, index,
+                                                indexes[j].columnCount,
+                                                OpTypes.EQUAL);
 
                 if (currentCost < cost) {
                     cost     = currentCost;
@@ -795,12 +789,14 @@ public class RangeVariableResolver {
     int getJoinedRangePosition(Expression e, int position,
                                RangeVariable[] currentRanges) {
 
-        int             found  = -1;
-        RangeVariable[] ranges = e.getJoinRangeVariables(currentRanges);
+        int found = -1;
 
-        for (int i = 0; i < ranges.length; i++) {
+        tempSet.clear();
+        e.getJoinRangeVariables(currentRanges, tempSet);
+
+        for (int i = 0; i < tempSet.size(); i++) {
             for (int j = 0; j < currentRanges.length; j++) {
-                if (ranges[i] == currentRanges[j]) {
+                if (tempSet.get(i) == currentRanges[j]) {
                     if (j >= position) {
                         if (found > 0) {
                             return -1;
@@ -1093,7 +1089,7 @@ public class RangeVariableResolver {
                     break;
                 }
                 default : {
-                    Error.runtimeError(ErrorCode.U_S0500,
+                    throw Error.runtimeError(ErrorCode.U_S0500,
                                        "RangeVariableResolver");
                 }
             }
@@ -1378,7 +1374,6 @@ public class RangeVariableResolver {
             }
 
             if (hasNull) {
-
                 exprList.add(e);
 
                 firstRowExpressions[i] = null;
@@ -1556,6 +1551,17 @@ public class RangeVariableResolver {
                     conditions.addCondition(e);
                 }
             }
+        }
+    }
+
+    private double searchCost(Session session, Table table, Index index,
+                              int count, int opType) {
+
+        if (table instanceof TableDerived) {
+            return 1000;
+        } else {
+            return table.getRowStore(session).searchCost(session, index,
+                                     count, opType);
         }
     }
 }

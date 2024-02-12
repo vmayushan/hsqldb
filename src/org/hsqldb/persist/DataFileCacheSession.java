@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@ import org.hsqldb.lib.Iterator;
  * A file-based row store for temporary CACHED table persistence.<p>
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class DataFileCacheSession extends DataFileCache {
@@ -77,7 +77,8 @@ public class DataFileCacheSession extends DataFileCache {
     public void open(boolean readonly) {
 
         try {
-            dataFile = new RAFile(database, dataFileName, false, false, false);
+            dataFile = new RAFile(database.logger, dataFileName, false, false,
+                                  false);
             fileFreePosition = initialFreePos;
 
             initBuffers();
@@ -148,7 +149,7 @@ public class DataFileCacheSession extends DataFileCache {
         Iterator it = cache.getIterator();
 
         while (it.hasNext()) {
-            Row row = (Row) it.next();
+            CachedObject row = (CachedObject) it.next();
 
             row.setInMemory(false);
             row.destroy();

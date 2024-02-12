@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,7 +55,7 @@ import org.hsqldb.types.Type;
  * Metadata for range variables, including conditions.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class RangeVariable {
@@ -112,9 +112,6 @@ public class RangeVariable {
 
     //
     int rangePosition;
-
-    //
-    int parsePosition;
 
     // for variable and parameter lists
     HashMappedList variables;
@@ -250,6 +247,23 @@ public class RangeVariable {
 
     public Table getTable() {
         return rangeTable;
+    }
+
+    public boolean hasAnyTerminalCondition() {
+
+        for (int i = 0; i < joinConditions.length; i++) {
+            if (joinConditions[0].terminalCondition != null) {
+                return true;
+            }
+        }
+
+        for (int i = 0; i < whereConditions.length; i++) {
+            if (whereConditions[0].terminalCondition != null) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public boolean hasAnyIndexCondition() {
@@ -777,7 +791,7 @@ public class RangeVariable {
             ExpressionColumn.checkColumnsResolved(unresolved);
             queryExpression.resolveTypesPartOne(session);
             queryExpression.resolveTypesPartTwo(session);
-            rangeTable.prepareTable();
+            rangeTable.prepareTable(session);
             setRangeTableVariables();
         }
     }
@@ -860,20 +874,29 @@ public class RangeVariable {
             return;
         }
 
+        OrderedHashSet subquerySet = null;
+
+        for (int i = 0; i < conditionsList.size(); i++) {
+            Expression e = (Expression) conditionsList.get(i);
+
+            subquerySet = e.collectAllSubqueries(subquerySet);
+
+            if (subquerySet != null) {
+                return;
+            }
+        }
+
         QueryExpression queryExpression = rangeTable.getQueryExpression();
 
         colExpr = ((QuerySpecification) queryExpression).exprColumns;
 
         for (int i = 0; i < conditionsList.size(); i++) {
-            Expression     e   = (Expression) conditionsList.get(i);
-            OrderedHashSet set = e.collectRangeVariables(null);
+            Expression e = (Expression) conditionsList.get(i);
 
             e = e.duplicate();
             e = e.replaceColumnReferences(this, colExpr);
 
-            if (e.collectAllSubqueries(null) != null) {
-                return;
-            }
+            OrderedHashSet set = e.collectRangeVariables(null);
 
             if (set != null) {
                 for (int j = 0; j < set.size(); j++) {
@@ -882,6 +905,8 @@ public class RangeVariable {
                     if (this != range
                             && range.rangeType == RangeVariable.TABLE_RANGE) {
                         queryExpression.setCorrelated();
+
+                        break;
                     }
                 }
             }
@@ -956,8 +981,7 @@ public class RangeVariable {
         }
 
         sb.append(b).append("cardinality=");
-        sb.append(conditions[0].rangeIndex.size(session,
-                rangeTable.getRowStore(session))).append("\n");
+        sb.append(rangeTable.getRowStore(session).elementCount()).append("\n");
 
         boolean fullScan = !conditions[0].hasIndexCondition();
 
@@ -1066,6 +1090,10 @@ public class RangeVariable {
                 if (it == null) {
                     return false;
                 }
+            }
+
+            if (session.abortTransaction) {
+                throw Error.error(ErrorCode.X_40000);
             }
 
             currentRow = it.getNextRow();
@@ -1196,6 +1224,10 @@ public class RangeVariable {
 
         public boolean next() {
 
+            if (session.abortTransaction) {
+                throw Error.error(ErrorCode.X_40000);
+            }
+
             while (condIndex < conditions.length) {
                 if (isBeforeFirst) {
                     isBeforeFirst = false;
@@ -1256,10 +1288,10 @@ public class RangeVariable {
             if (conditions[condIndex].indexCond == null) {
                 if (conditions[condIndex].reversed) {
                     it = conditions[condIndex].rangeIndex.lastRow(session,
-                            store, rangeVar.indexDistinctCount);
+                            store, rangeVar.indexDistinctCount, null);
                 } else {
                     it = conditions[condIndex].rangeIndex.firstRow(session,
-                            store, rangeVar.indexDistinctCount);
+                            store, rangeVar.indexDistinctCount, null);
                 }
             } else {
                 getFirstRow();
@@ -1377,36 +1409,40 @@ public class RangeVariable {
 
                 currentData = currentRow.getData();
 
-                if (conditions[condIndex].terminalCondition != null
-                        && !conditions[condIndex].terminalCondition
-                            .testCondition(session)) {
-                    break;
-                }
-
-                if (conditions[condIndex].indexEndCondition != null
-                        && !conditions[condIndex].indexEndCondition
-                            .testCondition(session)) {
-                    if (!conditions[condIndex].isJoin) {
-                        hasLeftOuterRow = false;
+                if (conditions[condIndex].terminalCondition != null) {
+                    if (!conditions[condIndex].terminalCondition.testCondition(
+                            session)) {
+                        break;
                     }
-
-                    break;
                 }
 
-                if (joinConditions[condIndex].nonIndexCondition != null
-                        && !joinConditions[condIndex].nonIndexCondition
-                            .testCondition(session)) {
-                    continue;
+                if (conditions[condIndex].indexEndCondition != null) {
+                    if (!conditions[condIndex].indexEndCondition.testCondition(
+                            session)) {
+                        if (!conditions[condIndex].isJoin) {
+                            hasLeftOuterRow = false;
+                        }
+
+                        break;
+                    }
                 }
 
-                if (whereConditions[condIndex].nonIndexCondition != null
-                        && !whereConditions[condIndex].nonIndexCondition
+                if (joinConditions[condIndex].nonIndexCondition != null) {
+                    if (!joinConditions[condIndex].nonIndexCondition
                             .testCondition(session)) {
-                    hasLeftOuterRow = false;
+                        continue;
+                    }
+                }
 
-                    addFoundRow();
+                if (whereConditions[condIndex].nonIndexCondition != null) {
+                    if (!whereConditions[condIndex].nonIndexCondition
+                            .testCondition(session)) {
+                        hasLeftOuterRow = false;
 
-                    continue;
+                        addFoundRow();
+
+                        continue;
+                    }
                 }
 
                 Expression e = conditions[condIndex].excludeConditions;
@@ -1884,7 +1920,8 @@ public class RangeVariable {
                     break;
                 }
                 default :
-                    Error.runtimeError(ErrorCode.U_S0500, "RangeVariable");
+                    throw Error.runtimeError(ErrorCode.U_S0500,
+                                             "RangeVariable");
             }
 
             indexedColumnCount = colCount;
@@ -1948,7 +1985,8 @@ public class RangeVariable {
                     sb.append("]\n");
                 }
 
-                if (indexEndCondition != null) {
+                if (this.opTypeEnd != OpTypes.EQUAL
+                        && indexEndCondition != null) {
                     String temp = indexEndCondition.describe(session, blanks);
 
                     sb.append(b).append("end condition=[").append(temp).append(

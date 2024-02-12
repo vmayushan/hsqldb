@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,7 +46,7 @@ import org.hsqldb.types.Type;
  * Implementation of Statement for callable procedures.<p>
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class StatementProcedure extends StatementDMQL {
@@ -91,6 +91,9 @@ public class StatementProcedure extends StatementDMQL {
         if (procedure != null) {
             session.getGrantee().checkAccess(procedure);
         }
+
+        isTransactionStatement = readTableNames.length > 0
+                                 || writeTableNames.length > 0;
     }
 
     /**
@@ -112,6 +115,11 @@ public class StatementProcedure extends StatementDMQL {
         setDatabseObjects(session, compileContext);
         checkAccessRights(session);
         session.getGrantee().checkAccess(procedure);
+
+        if (procedure.isPSM()) {
+            isTransactionStatement = readTableNames.length > 0
+                                     || writeTableNames.length > 0;
+        }
     }
 
     Result getResult(Session session) {
@@ -159,27 +167,31 @@ public class StatementProcedure extends StatementDMQL {
             }
         }
 
-        session.sessionContext.push();
+        session.sessionContext.pushRoutineInvocation();
 
-        session.sessionContext.routineArguments = data;
-        session.sessionContext.routineVariables = ValuePool.emptyObjectArray;
+        Result   result = Result.updateZeroResult;
+        Object[] callArguments;
 
-        Result result = Result.updateZeroResult;
+        try {
+            session.sessionContext.routineArguments = data;
+            session.sessionContext.routineVariables =
+                ValuePool.emptyObjectArray;
 
-        if (procedure.isPSM()) {
-            result = executePSMProcedure(session);
-        } else {
-            Connection connection = session.getInternalConnection();
+            if (procedure.isPSM()) {
+                result = executePSMProcedure(session);
+            } else {
+                Connection connection = session.getInternalConnection();
 
-            result = executeJavaProcedure(session, connection);
-        }
+                result = executeJavaProcedure(session, connection);
+            }
 
-        Object[] callArguments = session.sessionContext.routineArguments;
+            callArguments = session.sessionContext.routineArguments;
+        } finally {
+            session.sessionContext.popRoutineInvocation();
 
-        session.sessionContext.pop();
-
-        if (!procedure.isPSM()) {
-            session.releaseInternalConnection();
+            if (!procedure.isPSM()) {
+                session.releaseInternalConnection();
+            }
         }
 
         if (result.isError()) {
@@ -307,7 +319,7 @@ public class StatementProcedure extends StatementDMQL {
         subQueries.toArray(subQueryArray);
 
         for (int i = 0; i < subqueries.length; i++) {
-            subQueryArray[i].prepareTable();
+            subQueryArray[i].prepareTable(session);
         }
 
         return subQueryArray;

@@ -81,9 +81,9 @@ import org.hsqldb.result.ResultConstants;
  * A Server object acts as a network database server and is one way of using
  * the client-server mode of HSQLDB Database Engine. Instances of this
  * class handle native HSQL protocol connections exclusively, allowing database
- * queries to be performed efficienly across the network.  Server's direct
+ * queries to be performed efficiently across the network.  Server's direct
  * descendent, WebServer, handles HTTP protocol connections exclusively,
- * allowing HSQL protocol to be tunneled over HTTP to avoid sandbox and
+ * allowing HSQL protocol to be tunnelled over HTTP to avoid sandbox and
  * firewall issues, albeit less efficiently. <p>
  *
  * There are a number of ways to configure and start a Server instance. <p>
@@ -1392,6 +1392,8 @@ public class Server implements HsqlSocketRequestHandler, Notified {
     /**
      * This is called from org.hsqldb.DatabaseManager when a database is
      * shutdown. This shuts the server down if it is the last database
+     *
+     * @param id database id
      */
     public final void notify(int id) {
 

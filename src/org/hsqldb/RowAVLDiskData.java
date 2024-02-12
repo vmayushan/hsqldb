@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@ import org.hsqldb.rowio.RowOutputInterface;
  *
  * @author Bob Preston (sqlbob@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.2.9
+ * @version 2.3.3
  * @version 1.7.0
  */
 public class RowAVLDiskData extends RowAVL {
@@ -158,12 +158,6 @@ public class RowAVLDiskData extends RowAVL {
         out.writeSize(storageSize);
         out.writeData(this, table.colTypes);
         out.writeEnd();
-
-        hasDataChanged = false;
-    }
-
-    public synchronized void setChanged(boolean changed) {
-        hasDataChanged = changed;
     }
 
     public boolean isNew() {
@@ -172,6 +166,10 @@ public class RowAVLDiskData extends RowAVL {
 
     public boolean hasChanged() {
         return hasDataChanged;
+    }
+
+    public synchronized void setChanged(boolean flag) {
+        hasDataChanged = flag;
     }
 
     public void updateAccessCount(int count) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,7 @@ import org.hsqldb.persist.PersistentStore;
  * Manages rows involved in transactions
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 2.0.0
  */
 public class TransactionManagerMVCC extends TransactionManagerCommon
@@ -305,6 +305,14 @@ implements TransactionManager {
 
                 int type = action.mergeRollback(session, timestamp, row);
 
+                if (action.type == RowActionBase.ACTION_DELETE_FINAL) {
+                    if (action.deleteComplete) {
+                        continue;
+                    }
+
+                    action.deleteComplete = true;
+                }
+
                 action.store.rollbackRow(session, row, type, txModel);
             } finally {
                 writeLock.unlock();
@@ -370,7 +378,7 @@ implements TransactionManager {
                     if (actionSession != null) {
                         actionSession.waitingSessions.add(session);
                         session.waitedSessions.add(actionSession);
-                        session.latch.countUp();
+                        session.latch.setCount(session.waitedSessions.size());
                     }
 
                     redoCount++;
@@ -417,6 +425,12 @@ implements TransactionManager {
         }
 
         if (!redoAction) {
+            if (table.persistenceScope == Table.SCOPE_ROUTINE) {
+                row.rowAction = null;
+
+                return;
+            }
+
             session.rowActionList.add(action);
 
             return;
@@ -454,7 +468,7 @@ implements TransactionManager {
                 if (redoWait) {
                     actionSession.waitingSessions.add(session);
                     session.waitedSessions.add(actionSession);
-                    session.latch.countUp();
+                    session.latch.setCount(session.waitedSessions.size());
                 }
 
                 redoCount++;
@@ -714,8 +728,7 @@ implements TransactionManager {
     }
 
     /**
-     * add session to the end of queue when a transaction starts
-     * (depending on isolation mode)
+     * Update statement if out-of-date
      */
     public void beginAction(Session session, Statement cs) {
 
@@ -742,6 +755,10 @@ implements TransactionManager {
 
             session.isPreTransaction = true;
 
+            if (session.abortTransaction) {
+                return;
+            }
+
             if (!isLockedMode && !cs.isCatalogLock()) {
                 return;
             }
@@ -754,24 +771,25 @@ implements TransactionManager {
 
     /**
      * add session to the end of queue when a transaction starts
-     * (depending on isolation mode)
      */
     public void beginActionResume(Session session) {
 
         writeLock.lock();
 
         try {
-            session.actionTimestamp = getNextGlobalChangeTimestamp();
+            session.actionTimestamp      = getNextGlobalChangeTimestamp();
+            session.actionStartTimestamp = session.actionTimestamp;
 
-            if (!session.isTransaction) {
-                session.transactionTimestamp = session.actionTimestamp;
-                session.isTransaction        = true;
-
-                liveTransactionTimestamps.addLast(
-                    session.transactionTimestamp);
-
-                transactionCount++;
+            if (session.isTransaction) {
+                return;
             }
+
+            session.transactionTimestamp = session.actionTimestamp;
+            session.isTransaction        = true;
+
+            liveTransactionTimestamps.addLast(session.transactionTimestamp);
+
+            transactionCount++;
 
             session.isPreTransaction = false;
         } finally {
@@ -859,10 +877,11 @@ implements TransactionManager {
             Session current = (Session) session.waitingSessions.get(i);
 
             current.waitedSessions.remove(session);
-            current.latch.countDown();
+            current.latch.setCount(current.waitedSessions.size());
         }
 
-        // waitedSessions is not empty if the latch is zeroed by a different session
+        // waitedSessions is not empty if the latch is zeroed by a
+        // different administrative session
         session.waitedSessions.clear();
         session.waitingSessions.clear();
     }
@@ -874,9 +893,7 @@ implements TransactionManager {
         for (int i = 0; i < sessions.length; i++) {
             long timestamp = sessions[i].getTransactionTimestamp();
 
-            if (liveTransactionTimestamps.contains(timestamp)) {
-                set.add(sessions[i]);
-            } else if (sessions[i].isPreTransaction) {
+            if (sessions[i].isPreTransaction) {
                 set.add(sessions[i]);
             } else if (sessions[i].isTransaction) {
                 set.add(sessions[i]);
@@ -890,6 +907,7 @@ implements TransactionManager {
             return;
         }
 
+        //
         Session nextSession = null;
 
         for (int i = 0; i < session.waitingSessions.size(); i++) {
@@ -913,7 +931,7 @@ implements TransactionManager {
                 if (current != nextSession) {
                     current.waitedSessions.add(nextSession);
                     nextSession.waitingSessions.add(current);
-                    current.latch.countUp();
+                    current.latch.setCount(current.waitedSessions.size());
                 }
             }
 
@@ -925,14 +943,6 @@ implements TransactionManager {
     }
 
     boolean beginActionTPL(Session session, Statement cs) {
-
-        if (cs == null) {
-            return true;
-        }
-
-        if (session.abortTransaction) {
-            return false;
-        }
 
         if (session == catalogWriteSession) {
             return true;
@@ -951,6 +961,7 @@ implements TransactionManager {
                 session.tempSet.remove(session);
 
                 if (!session.tempSet.isEmpty()) {
+                    session.waitedSessions.addAll(session.tempSet);
                     setWaitingSessionTPL(session);
                 }
 
@@ -972,8 +983,6 @@ implements TransactionManager {
                     == SqlInvariants.LOBS_SCHEMA_HSQLNAME) {
                 return true;
             }
-        } else {
-            return true;
         }
 
         if (session.waitingSessions.contains(catalogWriteSession)) {
@@ -982,7 +991,7 @@ implements TransactionManager {
 
         if (catalogWriteSession.waitingSessions.add(session)) {
             session.waitedSessions.add(catalogWriteSession);
-            session.latch.countUp();
+            session.latch.setCount(session.waitedSessions.size());
         }
 
         return true;

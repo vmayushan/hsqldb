@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,7 +52,7 @@ import org.hsqldb.rowio.RowOutputInterface;
  * Implementation of PersistentStore for TEXT tables.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class RowStoreAVLDiskData extends RowStoreAVL {
@@ -68,8 +68,6 @@ public class RowStoreAVLDiskData extends RowStoreAVL {
         this.table        = table;
         this.indexList    = table.getIndexList();
         this.accessorList = new CachedObject[indexList.length];
-
-        manager.setStore(table, this);
     }
 
     public CachedObject get(long key, boolean keep) {
@@ -103,7 +101,7 @@ public class RowStoreAVLDiskData extends RowStoreAVL {
                 RowAction.addInsertAction(session, table, (Row) object);
             }
 
-            cache.add(object);
+            cache.add(object, false);
         } finally {
             cache.writeLock.unlock();
         }
@@ -196,6 +194,23 @@ public class RowStoreAVLDiskData extends RowStoreAVL {
         } catch (HsqlException e1) {}
     }
 
+    public void postCommitAction(Session session, RowAction action) {
+
+        if (action.getType() == RowAction.ACTION_DELETE_FINAL
+                && !action.isDeleteComplete()) {
+            action.setDeleteComplete();
+
+            Row row = action.getRow();
+
+            if (row == null) {
+                row = (Row) get(action.getPos(), false);
+            }
+
+            delete(session, row);
+            remove(row);
+        }
+    }
+
     public void commitRow(Session session, Row row, int changeAction,
                           int txModel) {
 
@@ -221,11 +236,7 @@ public class RowStoreAVLDiskData extends RowStoreAVL {
                 break;
 
             case RowAction.ACTION_DELETE_FINAL :
-                if (txModel != TransactionManager.LOCKS) {
-                    delete(session, row);
-                    remove(row);
-                }
-                break;
+                throw Error.runtimeError(ErrorCode.U_S0500, "RowStore");
         }
     }
 
@@ -278,7 +289,7 @@ public class RowStoreAVLDiskData extends RowStoreAVL {
     public void release() {
 
         destroy();
-        table.database.logger.closeTextCache((Table) table);
+        table.database.logger.textTableManager.closeTextCache((Table) table);
 
         cache = null;
 

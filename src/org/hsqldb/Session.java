@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -76,7 +76,7 @@ import org.hsqldb.types.Type.TypedComparator;
  * Implementation of SQL sessions.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.7.0
  */
 public class Session implements SessionInterface {
@@ -121,6 +121,7 @@ public class Session implements SessionInterface {
     int                timeZoneSeconds;
     boolean            isNetwork;
     private int        sessionMaxRows;
+    int                sessionOptimization = 8;
     private final long sessionId;
     int                sessionTxId = -1;
     private boolean    ignoreCase;
@@ -148,6 +149,9 @@ public class Session implements SessionInterface {
 
     //
     public StatementManager statementManager;
+
+    //
+    public Object special;
 
     /**
      * Constructs a new Session object.
@@ -378,6 +382,17 @@ public class Session implements SessionInterface {
         sessionMaxRows = rows;
     }
 
+    void setFeature(String feature, boolean value) {
+
+        int number = 8;
+
+        if (value) {
+            sessionOptimization |= number;
+        } else {
+            sessionOptimization &= ~number;
+        }
+    }
+
     /**
      * Checks whether this Session's current User has the privileges of
      * the ADMIN role.
@@ -558,21 +573,14 @@ public class Session implements SessionInterface {
             return;
         }
 
-        if (!isTransaction && rowActionList.size() == 0) {
-            sessionContext.isReadOnly = isReadOnlyDefault ? Boolean.TRUE
-                                                          : Boolean.FALSE;
+        if (isTransaction) {
+            if (!database.txManager.commitTransaction(this)) {
 
-            setIsolation(isolationLevelDefault);
+                // tempActionHistory.add("commit aborts " + actionTimestamp);
+                rollbackNoCheck(chain);
 
-            return;
-        }
-
-        if (!database.txManager.commitTransaction(this)) {
-
-//            tempActionHistory.add("commit aborts " + actionTimestamp);
-            rollbackNoCheck(chain);
-
-            throw Error.error(ErrorCode.X_40001);
+                throw Error.error(ErrorCode.X_40001);
+            }
         }
 
         endTransaction(true, chain);
@@ -604,7 +612,10 @@ public class Session implements SessionInterface {
             return;
         }
 
-        database.txManager.rollback(this);
+        if (isTransaction) {
+            database.txManager.rollback(this);
+        }
+
         endTransaction(false, chain);
     }
 
@@ -620,8 +631,6 @@ public class Session implements SessionInterface {
 
         lockStatement = null;
 
-        logSequences();
-
         if (!chain) {
             sessionContext.isReadOnly = isReadOnlyDefault ? Boolean.TRUE
                                                           : Boolean.FALSE;
@@ -629,10 +638,11 @@ public class Session implements SessionInterface {
             setIsolation(isolationLevelDefault);
         }
 
-        Statement endTX = commit ? StatementSession.commitNoChainStatement
-                                 : StatementSession.rollbackNoChainStatement;
-
         if (database.logger.getSqlEventLogLevel() > 0) {
+            Statement endTX = commit ? StatementSession.commitNoChainStatement
+                                     : StatementSession
+                                         .rollbackNoChainStatement;
+
             database.logger.logStatementEvent(this, endTX, null,
                                               Result.updateZeroResult,
                                               SimpleLog.LOG_ERROR);
@@ -1958,11 +1968,11 @@ public class Session implements SessionInterface {
         return DatabaseURL.S_URL_PREFIX + database.getURI();
     }
 
-    boolean isProcessingScript() {
+    public boolean isProcessingScript() {
         return isProcessingScript;
     }
 
-    boolean isProcessingLog() {
+    public boolean isProcessingLog() {
         return isProcessingLog;
     }
 
@@ -2121,7 +2131,7 @@ public class Session implements SessionInterface {
     }
 
     // services
-    TypedComparator  typedComparator;
+    TypedComparator  typedComparator = Type.newComparator(this);
     Scanner          secondaryScanner;
     SimpleDateFormat simpleDateFormat;
     SimpleDateFormat simpleDateFormatGMT;
@@ -2130,11 +2140,6 @@ public class Session implements SessionInterface {
 
     //
     public TypedComparator getComparator() {
-
-        if (typedComparator == null) {
-            typedComparator = Type.newComparator(this);
-        }
-
         return typedComparator;
     }
 
@@ -2293,7 +2298,7 @@ public class Session implements SessionInterface {
             boolean aborted = this.aborted;
 
             currentTimeout = 0;
-            aborted        = false;
+            this.aborted   = false;
 
             return aborted;
         }

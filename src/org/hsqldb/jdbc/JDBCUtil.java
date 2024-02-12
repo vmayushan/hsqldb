@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,7 +50,7 @@ import org.hsqldb.error.Error;
 import org.hsqldb.error.ErrorCode;
 import org.hsqldb.result.Result;
 
-/* $Id: JDBCUtil.java 5165 2013-02-06 19:36:13Z fredt $ */
+/* $Id: JDBCUtil.java 5487 2015-06-06 16:15:53Z fredt $ */
 
 // boucherb@users - 20060523 - patch 1.9.0 - removed some unused imports
 // Revision 1.16  2006/07/12 11:53:53  boucherb
@@ -60,7 +60,7 @@ import org.hsqldb.result.Result;
  * Provides driver constants and a gateway from internal HsqlExceptions to
  * external SQLExceptions.
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
  * @version 2.0.1
  * @since 1.7.2

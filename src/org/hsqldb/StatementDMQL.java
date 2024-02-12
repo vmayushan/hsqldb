@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,9 +47,9 @@ import org.hsqldb.rights.Grantee;
 /**
  * Statement implementation for DML and base DQL statements.
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.2.7
+ * @version 2.3.3
  * @since 1.7.2
  */
 
@@ -193,14 +193,12 @@ public abstract class StatementDMQL extends Statement {
             }
 
             result = getResult(session);
-
-            clearStructures(session);
         } catch (Throwable t) {
-            clearStructures(session);
-
             result = Result.newErrorResult(t, null);
 
             result.getException().setStatementType(group, type);
+        } finally {
+            clearStructures(session);
         }
 
         return result;
