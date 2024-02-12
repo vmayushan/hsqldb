@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,7 +58,7 @@ import org.hsqldb.types.Types;
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
  *
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class Routine implements SchemaObject, RangeGroup, Cloneable {
@@ -86,7 +86,6 @@ public class Routine implements SchemaObject, RangeGroup, Cloneable {
     Type[]           parameterTypes;
     int              typeGroups;
     Type             returnType;
-    Type[]           tableType;
     Table            returnTable;
     final int        routineType;
     int              language   = LANGUAGE_SQL;
@@ -185,17 +184,24 @@ public class Routine implements SchemaObject, RangeGroup, Cloneable {
         ParserRoutine p = new ParserRoutine(session,
                                             new Scanner(statement.getSQL()));
 
-        p.read();
-        p.startRecording();
+        session.sessionContext.pushRoutineTables();
 
-        Statement statement = p.compileSQLProcedureStatementOrNull(this, null);
-        Token[]   tokenisedStatement = p.getRecordedStatement();
-        String    sql                = Token.getSQL(tokenisedStatement);
+        try {
+            p.read();
+            p.startRecording();
 
-        statement.setSQL(sql);
-        setProcedure(statement);
-        statement.resolve(session);
-        setReferences();
+            Statement statement = p.compileSQLProcedureStatementOrNull(this,
+                null);
+            Token[] tokenisedStatement = p.getRecordedStatement();
+            String  sql                = Token.getSQL(tokenisedStatement);
+
+            statement.setSQL(sql);
+            setProcedure(statement);
+            statement.resolve(session);
+            setReferences();
+        } finally {
+            session.sessionContext.popRoutineTables();
+        }
     }
 
     public String getSQL() {
@@ -436,14 +442,6 @@ public class Routine implements SchemaObject, RangeGroup, Cloneable {
 
     public Type getReturnType() {
         return returnType;
-    }
-
-    public void setTableType(Type[] types) {
-        tableType = types;
-    }
-
-    public Type[] getTableType() {
-        return tableType;
     }
 
     public Table getTable() {

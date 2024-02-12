@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@ import org.hsqldb.types.Types;
 
 /**
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.2.9
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class ParserBase {
@@ -72,9 +72,9 @@ public class ParserBase {
      *
      * @param t the token source from which to parse commands
      */
-    ParserBase(Scanner t) {
-        scanner = t;
-        token   = scanner.token;
+    ParserBase(Scanner scanner) {
+        this.scanner = scanner;
+        this.token   = scanner.token;
     }
 
     public Scanner getScanner() {
@@ -220,7 +220,7 @@ public class ParserBase {
         if (isRecording) {
             return (Token) recordedStatement.get(recordedStatement.size() - 1);
         } else {
-            return dummyToken;
+            return token.duplicate();
         }
     }
 
@@ -294,18 +294,18 @@ public class ParserBase {
     }
 
     boolean isReservedKey() {
-        return scanner.token.isReservedIdentifier;
+        return token.isReservedIdentifier;
     }
 
     boolean isCoreReservedKey() {
-        return scanner.token.isCoreReservedIdentifier;
+        return token.isCoreReservedIdentifier;
     }
 
     boolean isNonReservedIdentifier() {
 
-        return !scanner.token.isReservedIdentifier
-               && (scanner.token.isUndelimitedIdentifier
-                   || scanner.token.isDelimitedIdentifier);
+        return !token.isReservedIdentifier
+               && (token.isUndelimitedIdentifier
+                   || token.isDelimitedIdentifier);
     }
 
     void checkIsNonReservedIdentifier() {
@@ -317,9 +317,9 @@ public class ParserBase {
 
     boolean isNonCoreReservedIdentifier() {
 
-        return !scanner.token.isCoreReservedIdentifier
-               && (scanner.token.isUndelimitedIdentifier
-                   || scanner.token.isDelimitedIdentifier);
+        return !token.isCoreReservedIdentifier
+               && (token.isUndelimitedIdentifier
+                   || token.isDelimitedIdentifier);
     }
 
     void checkIsNonCoreReservedIdentifier() {
@@ -331,14 +331,13 @@ public class ParserBase {
 
     void checkIsIrregularCharInIdentifier() {
 
-        if (scanner.token.hasIrregularChar) {
+        if (token.hasIrregularChar) {
             throw unexpectedToken();
         }
     }
 
     boolean isIdentifier() {
-        return scanner.token.isUndelimitedIdentifier
-               || scanner.token.isDelimitedIdentifier;
+        return token.isUndelimitedIdentifier || token.isDelimitedIdentifier;
     }
 
     void checkIsIdentifier() {
@@ -349,19 +348,19 @@ public class ParserBase {
     }
 
     boolean isDelimitedIdentifier() {
-        return scanner.token.isDelimitedIdentifier;
+        return token.isDelimitedIdentifier;
     }
 
     void checkIsDelimitedIdentifier() {
 
-        if (token.tokenType != Tokens.X_DELIMITED_IDENTIFIER) {
+        if (!token.isDelimitedIdentifier) {
             throw Error.error(ErrorCode.X_42569);
         }
     }
 
-    void checkIsNotQuoted() {
+    void checkIsUndelimitedIdentifer() {
 
-        if (token.tokenType == Tokens.X_DELIMITED_IDENTIFIER) {
+        if (!token.isUndelimitedIdentifier) {
             throw unexpectedToken();
         }
     }

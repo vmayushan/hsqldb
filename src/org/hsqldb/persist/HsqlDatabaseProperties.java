@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@ import org.hsqldb.lib.StringUtil;
  * Manages a .properties file for a database.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.7.0
  */
 public class HsqlDatabaseProperties extends HsqlProperties {
@@ -149,13 +149,13 @@ public class HsqlDatabaseProperties extends HsqlProperties {
 
     // versions
     public static final String VERSION_STRING_1_8_0 = "1.8.0";
-    public static final String THIS_VERSION         = "2.3.2";
-    public static final String THIS_FULL_VERSION    = "2.3.2";
+    public static final String THIS_VERSION         = "2.3.3";
+    public static final String THIS_FULL_VERSION    = "2.3.3";
     public static final String THIS_CACHE_VERSION   = "2.0.0";
     public static final String PRODUCT_NAME         = "HSQL Database Engine";
     public static final int    MAJOR                = 2,
                                MINOR                = 3,
-                               REVISION             = 2;
+                               REVISION             = 3;
 
     /**
      * system properties supported by HSQLDB
@@ -172,6 +172,9 @@ public class HsqlDatabaseProperties extends HsqlProperties {
     public static final String  hsqldb_version  = "version";
     public static final String  hsqldb_readonly = "readonly";
     private static final String hsqldb_modified = "modified";
+
+    //
+    public static final String tx_timestamp = "tx_timestamp";
 
     //
     public static final String hsqldb_cache_version = "hsqldb.cache_version";
@@ -238,7 +241,6 @@ public class HsqlDatabaseProperties extends HsqlProperties {
         "hsqldb.full_log_replay";
     public static final String hsqldb_large_data  = "hsqldb.large_data";
     public static final String hsqldb_files_space = "hsqldb.files_space";
-    public static final String hsqldb_files_check = "hsqldb.files_check";
     public static final String hsqldb_digest      = "hsqldb.digest";
 
     //
@@ -286,6 +288,9 @@ public class HsqlDatabaseProperties extends HsqlProperties {
     public static final String textdb_fs           = "textdb.fs";
     public static final String textdb_vs           = "textdb.vs";
     public static final String textdb_lvs          = "textdb.lvs";
+
+    //
+    public static final String hsqldb_min_reuse = "hsqldb.min_reuse";
 
     static {
 
@@ -358,6 +363,8 @@ public class HsqlDatabaseProperties extends HsqlProperties {
                                           SQL_PROPERTY, "MEMORY"));
         dbMeta.put(hsqldb_digest,
                    HsqlProperties.getMeta(hsqldb_digest, SQL_PROPERTY, "MD5"));
+        dbMeta.put(tx_timestamp,
+                   HsqlProperties.getMeta(tx_timestamp, SYSTEM_PROPERTY));
 
         // boolean defaults for user defined props
         dbMeta.put(hsqldb_tx_conflict_rollback,
@@ -466,11 +473,6 @@ public class HsqlDatabaseProperties extends HsqlProperties {
                                           new int[] {
             0, 1, 2, 4, 8, 16, 32, 64
         }));
-        dbMeta.put(hsqldb_files_check,
-                   HsqlProperties.getMeta(hsqldb_files_check, SQL_PROPERTY, 0,
-                                          new int[] {
-            0, 1
-        }));
 
         // integral defaults for user-defined props - sets
         dbMeta.put(hsqldb_write_delay_millis,
@@ -529,6 +531,9 @@ public class HsqlDatabaseProperties extends HsqlProperties {
         dbMeta.put(hsqldb_nio_max_size,
                    HsqlProperties.getMeta(hsqldb_nio_max_size, SQL_PROPERTY,
                                           256, 64, 262144));
+        dbMeta.put(hsqldb_min_reuse,
+                   HsqlProperties.getMeta(hsqldb_min_reuse, SQL_PROPERTY, 0,
+                                          0, 1024 * 1024));
     }
 
     private Database database;
@@ -632,6 +637,9 @@ public class HsqlDatabaseProperties extends HsqlProperties {
             }
 
             props.setProperty(hsqldb_version, THIS_VERSION);
+            props.setProperty(
+                tx_timestamp,
+                Long.toString(database.logger.getFilesTimestamp()));
 
             if (database.logger.isStoredFileAccess()) {
                 if (!database.logger.isNewStoredFileAccess()) {

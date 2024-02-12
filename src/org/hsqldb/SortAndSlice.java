@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2014, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,7 @@ import org.hsqldb.types.Type;
  * Implementation of ORDER BY and LIMIT properties of query expressions.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public final class SortAndSlice {
@@ -342,6 +342,10 @@ public final class SortAndSlice {
         Index rangeIndex = select.rangeVariables[0].getSortIndex();
 
         if (rangeIndex == null) {
+            return false;
+        }
+
+        if (select.rangeVariables[0].hasAnyTerminalCondition()) {
             return false;
         }
 

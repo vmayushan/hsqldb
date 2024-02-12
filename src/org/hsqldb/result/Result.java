@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,9 +68,9 @@ import org.hsqldb.types.Type;
  *  comunicating all such requests and responses across the network.
  *  Uses a navigator for data.
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class Result {
@@ -245,14 +245,14 @@ public class Result {
 
     public static Result newResult(DataInput dataInput,
                                    RowInputBinary in)
-                                   throws IOException, HsqlException {
+                                   throws IOException {
         return newResult(null, dataInput.readByte(), dataInput, in);
     }
 
     public static Result newResult(Session session, int mode,
                                    DataInput dataInput,
                                    RowInputBinary in)
-                                   throws IOException, HsqlException {
+                                   throws IOException {
 
         try {
             if (mode == ResultConstants.LARGE_OBJECT_OP) {
@@ -270,7 +270,7 @@ public class Result {
     public void readAdditionalResults(SessionInterface session,
                                       DataInputStream inputStream,
                                       RowInputBinary in)
-                                      throws IOException, HsqlException {
+                                      throws IOException {
 
         Result currentResult = this;
 
@@ -292,7 +292,7 @@ public class Result {
     public void readLobResults(SessionInterface session,
                                DataInputStream inputStream,
                                RowInputBinary in)
-                               throws IOException, HsqlException {
+                               throws IOException {
 
         Result  currentResult = this;
         boolean hasLob        = false;
@@ -330,7 +330,7 @@ public class Result {
     private static Result newResult(Session session, DataInput dataInput,
                                     RowInputBinary in,
                                     int mode)
-                                    throws IOException, HsqlException {
+                                    throws IOException {
 
         Result result = newResult(mode);
         int    length = dataInput.readInt();
@@ -1066,7 +1066,7 @@ public class Result {
 
     public void write(SessionInterface session, DataOutputStream dataOut,
                       RowOutputInterface rowOut)
-                      throws IOException, HsqlException {
+                      throws IOException {
 
         rowOut.reset();
         rowOut.writeByte(mode);
@@ -1273,7 +1273,7 @@ public class Result {
                 throw Error.runtimeError(ErrorCode.U_S0500, "Result");
         }
 
-        rowOut.writeIntData(rowOut.size() - startPos, startPos);
+        rowOut.writeSize(rowOut.size() - startPos);
         dataOut.write(rowOut.getOutputStream().getBuffer(), 0, rowOut.size());
 
         int    count   = getLobCount();

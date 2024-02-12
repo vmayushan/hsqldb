@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -71,7 +71,7 @@ import org.hsqldb.types.TimestampData;
 import org.hsqldb.types.Type;
 import org.hsqldb.types.Types;
 
-/* $Id: JDBCCallableStatement.java 5259 2013-07-05 20:19:09Z fredt $ */
+/* $Id: JDBCCallableStatement.java 5487 2015-06-06 16:15:53Z fredt $ */
 
 /** @todo fredt 1.9.0 - review wrt multiple result sets, named parameters etc. */
 
@@ -196,7 +196,7 @@ import org.hsqldb.types.Types;
  * </div>
  * <!-- end Release-specific documentation -->
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
  * @version 2.3.0
  * @since 1.7.2

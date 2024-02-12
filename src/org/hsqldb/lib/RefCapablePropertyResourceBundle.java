@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
-/* $Id: RefCapablePropertyResourceBundle.java 5221 2013-03-30 10:57:58Z fredt $ */
+/* $Id: RefCapablePropertyResourceBundle.java 5437 2015-03-09 23:45:20Z fredt $ */
 
 /**
  * Just like PropertyResourceBundle, except keys mapped to nothing in the

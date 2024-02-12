@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,7 @@ import javax.transaction.xa.XAResource;
 
 import org.hsqldb.jdbc.JDBCConnection;
 
-// @(#)$Id: JDBCXAConnection.java 5026 2012-07-14 20:02:27Z fredt $
+// @(#)$Id: JDBCXAConnection.java 5493 2015-06-20 22:43:00Z fredt $
 
 /**
  * Subclass of JDBCPooledConnection implements the XAConneciton interface.
@@ -83,6 +83,9 @@ public class JDBCXAConnection extends JDBCPooledConnection implements XAConnecti
 
         isInUse = true;
 
+        if (connection == null) {
+            throw new SQLException("Connection in closed");
+        }
 
         return new JDBCXAConnectionWrapper(xaResource, this, connection);
     }

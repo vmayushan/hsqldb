@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,13 +56,14 @@ import org.hsqldb.types.Types;
  *
  * @author Bob Preston (sqlbob@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.2.7
+ * @version 2.3.3
  * @since 1.7.0
  */
 public class RowOutputBinary extends RowOutputBase {
 
     public static final int INT_STORE_SIZE = 4;
     int                     storageSize;
+    int                     sizePosition;
     final int               scale;    // 2 to power n where n >= 0
     final int               mask;
 
@@ -70,8 +71,9 @@ public class RowOutputBinary extends RowOutputBase {
 
         super(initialSize);
 
-        this.scale = scale;
-        this.mask  = ~(scale - 1);
+        this.scale        = scale;
+        this.mask         = ~(scale - 1);
+        this.sizePosition = -1;
     }
 
     /**
@@ -83,8 +85,9 @@ public class RowOutputBinary extends RowOutputBase {
 
         super(buffer);
 
-        scale     = 1;
-        this.mask = ~(scale - 1);
+        this.scale        = 1;
+        this.mask         = ~(scale - 1);
+        this.sizePosition = -1;
     }
 
 // fredt@users - comment - methods for writing column type, name and data size
@@ -105,10 +108,14 @@ public class RowOutputBinary extends RowOutputBase {
         super.writeData(row, types);
     }
 
+    public void setStorageSize(int size) {
+        storageSize = size;
+    }
+
     public void writeEnd() {
 
         if (count > storageSize) {
-            Error.runtimeError(ErrorCode.U_S0500, "RowOutputBinary");
+            throw Error.runtimeError(ErrorCode.U_S0500, "RowOutputBinary");
         }
 
         for (; count < storageSize; ) {
@@ -118,9 +125,15 @@ public class RowOutputBinary extends RowOutputBase {
 
     public void writeSize(int size) {
 
-        storageSize = size;
+        if (sizePosition < 0) {
+            sizePosition = count;
 
-        writeInt(size);
+            writeInt(size);
+        } else {
+            writeIntData(size, sizePosition);
+        }
+
+        storageSize = size;
     }
 
     public void writeType(int type) {
@@ -263,7 +276,7 @@ public class RowOutputBinary extends RowOutputBase {
         writeInt(o.length);
 
         for (int i = 0; i < o.length; i++) {
-            writeData(type, o[i]);
+            writeData(o[i], type);
         }
     }
 
@@ -457,21 +470,24 @@ public class RowOutputBinary extends RowOutputBase {
 
         super.reset();
 
-        storageSize = 0;
+        storageSize  = 0;
+        sizePosition = -1;
     }
 
     public void reset(int newSize) {
 
         super.reset(newSize);
 
-        storageSize = 0;
+        storageSize  = 0;
+        sizePosition = -1;
     }
 
     public void reset(byte[] buffer) {
 
         super.reset(buffer);
 
-        storageSize = 0;
+        storageSize  = 0;
+        sizePosition = -1;
     }
 
     public RowOutputInterface duplicate() {

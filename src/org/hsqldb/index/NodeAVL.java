@@ -1,7 +1,7 @@
 /*
  * For work developed by the HSQL Development Group:
  *
- * Copyright (c) 2001-2011, The HSQL Development Group
+ * Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -96,7 +96,7 @@ import org.hsqldb.rowio.RowInputInterface;
  *  New class derived from Hypersonic SQL code and enhanced in HSQLDB. <p>
  *
  * @author Thomas Mueller (Hypersonic SQL Group)
- * @version 1.9.0
+ * @version 2.3.3
  * @since Hypersonic SQL
  */
 public class NodeAVL implements CachedObject {
@@ -262,6 +262,10 @@ public class NodeAVL implements CachedObject {
         return 0;
     }
 
+    final public boolean isInvariable() {
+        return false;
+    }
+
     final public boolean isBlock() {
         return false;
     }
@@ -275,6 +279,9 @@ public class NodeAVL implements CachedObject {
     public boolean hasChanged() {
         return false;
     }
+
+    public void setChanged(boolean flag) {}
+
 
     public boolean isKeepInMemory() {
         return false;

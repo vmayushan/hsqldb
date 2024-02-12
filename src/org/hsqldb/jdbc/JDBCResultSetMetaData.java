@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@ import org.hsqldb.types.IntervalType;
 import org.hsqldb.types.Type;
 import org.hsqldb.types.Types;
 
-/* $Id: JDBCResultSetMetaData.java 5313 2014-01-14 20:33:08Z fredt $ */
+/* $Id: JDBCResultSetMetaData.java 5487 2015-06-06 16:15:53Z fredt $ */
 
 // fredt@users    - 20040412 - removed DITypeInfo dependencies
 // boucherb@users - 200404xx - removed unused imports;refinement for better
@@ -96,7 +96,7 @@ import org.hsqldb.types.Types;
  * </div>
  * <!-- end release-specific documentation -->
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
  * @version 2.2.6
  * @revised JDK 1.6, HSQLDB 2.0

@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,17 +57,20 @@ import org.hsqldb.types.Type;
  * corresponds to ScriptWriterText.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- *  @version 2.3.0
+ *  @version 2.3.3
  *  @since 1.7.2
  */
 public class ScriptReaderText extends ScriptReaderBase {
 
     // this is used only to enable reading one logged line at a time
     LineReader      dataStreamIn;
+    InputStream     inputStream;
+    InputStream     bufferedStream;
+    GZIPInputStream gzipStream;
     RowInputTextLog rowIn;
     boolean         isInsert;
 
-    public ScriptReaderText(Database db) {
+    ScriptReaderText(Database db) {
         super(db);
     }
 
@@ -76,27 +79,20 @@ public class ScriptReaderText extends ScriptReaderBase {
 
         super(db);
 
-        InputStream inputStream =
+        inputStream =
             database.logger.getFileAccess().openInputStreamElement(fileName);
+        bufferedStream = new BufferedInputStream(inputStream);
 
-        inputStream = new BufferedInputStream(inputStream);
+        InputStream tempStream;
 
         if (compressed) {
-            inputStream = new GZIPInputStream(inputStream);
+            gzipStream = new GZIPInputStream(bufferedStream);
+            tempStream = gzipStream;
+        } else {
+            tempStream = bufferedStream;
         }
 
-        dataStreamIn = new LineReader(inputStream,
-                                      ScriptWriterText.ISO_8859_1);
-        rowIn = new RowInputTextLog(db.databaseProperties.isVersion18());
-    }
-
-    public ScriptReaderText(Database db, InputStream inputStream) {
-
-        super(db);
-
-//        inputStream = new BufferedInputStream(inputStream);
-        dataStreamIn = new LineReader(inputStream,
-                                      ScriptWriterText.ISO_8859_1);
+        dataStreamIn = new LineReader(tempStream, ScriptWriterText.ISO_8859_1);
         rowIn = new RowInputTextLog(db.databaseProperties.isVersion18());
     }
 
@@ -149,8 +145,10 @@ public class ScriptReaderText extends ScriptReaderBase {
                     Error.error(result.getException(),
                                 ErrorCode.ERROR_IN_SCRIPT_FILE,
                                 ErrorCode.M_DatabaseScriptReader_read,
-                                new Object[] {database.getCanonicalPath(),
-                    new Integer(lineCount), result.getMainString()
+                                new Object[] {
+                    Integer.toString(lineCount) + " "
+                    + database.getCanonicalPath(),
+                    result.getMainString()
                 });
 
                 handleException(e);
@@ -170,6 +168,8 @@ public class ScriptReaderText extends ScriptReaderBase {
                     isInsert = false) {
                 if (statementType == SET_SCHEMA_STATEMENT) {
                     session.setSchema(currentSchema);
+
+                    tablename = null;
 
                     continue;
                 } else if (statementType == INSERT_STATEMENT) {
@@ -200,7 +200,8 @@ public class ScriptReaderText extends ScriptReaderBase {
 
             database.setReferentialIntegrity(true);
         } catch (Throwable t) {
-            database.logger.logSevereEvent("readExistingData failed", t);
+            database.logger.logSevereEvent("readExistingData failed "
+                                           + lineCount, t);
 
             throw Error.error(t, ErrorCode.ERROR_IN_SCRIPT_FILE,
                               ErrorCode.M_DatabaseScriptReader_read,
@@ -293,18 +294,30 @@ public class ScriptReaderText extends ScriptReaderBase {
             colTypes = currentTable.getColumnTypes();
         }
 
-        try {
-            rowData = rowIn.readData(colTypes);
-        } catch (IOException e) {
-            throw Error.error(e, ErrorCode.FILE_IO_ERROR, null);
-        }
+        rowData = rowIn.readData(colTypes);
     }
 
     public void close() {
 
         try {
-            dataStreamIn.close();
+            if (dataStreamIn != null) {
+                dataStreamIn.close();
+            }
+        } catch (Exception e) {}
 
+        try {
+            if (gzipStream != null) {
+                gzipStream.close();
+            }
+        } catch (Exception e) {}
+
+        try {
+            if (inputStream != null) {
+                inputStream.close();
+            }
+        } catch (Exception e) {}
+
+        try {
             if (scrwriter != null) {
                 scrwriter.close();
             }

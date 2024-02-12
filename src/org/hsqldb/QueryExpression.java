@@ -55,7 +55,7 @@ import org.hsqldb.types.Types;
  * Implementation of an SQL query expression
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.9.0
  */
 
@@ -213,17 +213,7 @@ public class QueryExpression implements RangeGroup {
                         Type[] targetTypes) {
 
         resolveReferences(session, rangeGroups);
-
-        if (unresolvedExpressions != null) {
-            for (int i = 0; i < unresolvedExpressions.size(); i++) {
-                Expression e = (Expression) unresolvedExpressions.get(i);
-                HsqlList list = e.resolveColumnReferences(session,
-                    RangeGroup.emptyGroup, rangeGroups, null);
-
-                ExpressionColumn.checkColumnsResolved(list);
-            }
-        }
-
+        ExpressionColumn.checkColumnsResolved(unresolvedExpressions);
         resolveTypesPartOne(session);
 
         if (targetTypes != null) {
@@ -554,6 +544,10 @@ public class QueryExpression implements RangeGroup {
     void resolveTypesPartThree(Session session) {
         compileContext = null;
         isResolved     = true;
+
+        if (isRecursive) {
+            recursiveTable.queryExpression.isCorrelated = false;
+        }
     }
 
     public Object[] getValues(Session session) {

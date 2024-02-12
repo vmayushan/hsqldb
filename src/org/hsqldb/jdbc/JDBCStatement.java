@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,7 @@ import org.hsqldb.result.Result;
 import org.hsqldb.result.ResultConstants;
 import org.hsqldb.result.ResultProperties;
 
-/* $Id: JDBCStatement.java 5283 2013-09-29 17:52:44Z unsaved $ */
+/* $Id: JDBCStatement.java 5487 2015-06-06 16:15:53Z fredt $ */
 
 // fredt@users   20020320 - patch 1.7.0 - JDBC 2 support and error trapping
 //
@@ -132,7 +132,7 @@ import org.hsqldb.result.ResultProperties;
  * </div>
  * <!-- end release-specific documentation -->
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
  * @version 2.3.0
  * @revised JDK 1.6, HSQLDB 2.0

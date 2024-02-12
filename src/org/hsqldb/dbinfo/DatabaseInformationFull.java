@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,6 +60,7 @@ import org.hsqldb.TextTable;
 import org.hsqldb.Tokens;
 import org.hsqldb.TriggerDef;
 import org.hsqldb.View;
+import org.hsqldb.index.Index;
 import org.hsqldb.lib.ArrayUtil;
 import org.hsqldb.lib.FileUtil;
 import org.hsqldb.lib.HashMappedList;
@@ -71,9 +72,12 @@ import org.hsqldb.lib.Set;
 import org.hsqldb.lib.WrapperIterator;
 import org.hsqldb.map.ValuePool;
 import org.hsqldb.persist.DataFileCache;
+import org.hsqldb.persist.DataSpaceManager;
+import org.hsqldb.persist.DirectoryBlockCachedObject;
 import org.hsqldb.persist.HsqlDatabaseProperties;
 import org.hsqldb.persist.HsqlProperties;
 import org.hsqldb.persist.PersistentStore;
+import org.hsqldb.persist.TableSpaceManager;
 import org.hsqldb.persist.TextCache;
 import org.hsqldb.persist.TextFileSettings;
 import org.hsqldb.result.Result;
@@ -112,9 +116,9 @@ import org.hsqldb.types.Type;
  * The definitions for the rest of system vies are provided by
  * DatabaseInformationMain, which this class extends. <p>
  *
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.7.2
  */
 final class DatabaseInformationFull
@@ -178,6 +182,9 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
             case SYSTEM_COMMENTS :
                 return SYSTEM_COMMENTS(session, store);
 
+            case SYSTEM_INDEXSTATS :
+                return SYSTEM_INDEXSTATS(session, store);
+
             case SYSTEM_SESSIONINFO :
                 return SYSTEM_SESSIONINFO(session, store);
 
@@ -187,11 +194,11 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
             case SYSTEM_SESSIONS :
                 return SYSTEM_SESSIONS(session, store);
 
-            case SYSTEM_TEXTTABLES :
-                return SYSTEM_TEXTTABLES(session, store);
-
             case SYSTEM_TABLESTATS :
                 return SYSTEM_TABLESTATS(session, store);
+
+            case SYSTEM_TEXTTABLES :
+                return SYSTEM_TEXTTABLES(session, store);
 
             // SQL views
             case ADMINISTRABLE_ROLE_AUTHORIZATIONS :
@@ -484,6 +491,10 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
         Iterator      tables;
         Table         table;
 
+        if (!session.isAdmin()) {
+            return t;
+        }
+
         // Initialization
         cacheSet = new HashSet();
 
@@ -494,18 +505,27 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
         while (tables.hasNext()) {
             table = (Table) tables.next();
 
+            if (!table.isText()) {
+                continue;
+            }
+
+            cache = null;
+
             PersistentStore currentStore = table.getRowStore(session);
 
-            if (session.getGrantee().isFullyAccessibleByRole(
-                    table.getName())) {
-                if (currentStore != null) {
-                    cache = currentStore.getCache();
-                }
-
-                if (cache != null) {
-                    cacheSet.add(cache);
-                }
+            if (currentStore != null) {
+                cache = currentStore.getCache();
             }
+
+            if (cache != null) {
+                cacheSet.add(cache);
+            }
+        }
+
+        if (database.logger.hasCache()) {
+            cache = database.logger.getCache();
+
+            cacheSet.add(cache);
         }
 
         caches = cacheSet.iterator();
@@ -1214,8 +1234,8 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
             addColumn(t, "VARCHAR_SEPARATOR", CHARACTER_DATA);
             addColumn(t, "LONGVARCHAR_SEPARATOR", CHARACTER_DATA);
             addColumn(t, "IS_IGNORE_FIRST", Type.SQL_BOOLEAN);
-            addColumn(t, "IS_ALL_QUOTED", Type.SQL_BOOLEAN);
             addColumn(t, "IS_QUOTED", Type.SQL_BOOLEAN);
+            addColumn(t, "IS_ALL_QUOTED", Type.SQL_BOOLEAN);
             addColumn(t, "IS_DESC", Type.SQL_BOOLEAN);
 
             // ------------------------------------------------------------
@@ -1251,6 +1271,10 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
         Table    table;
         Object[] row;
 
+        if (!session.isAdmin()) {
+            return t;
+        }
+
         // Initialization
         tables =
             database.schemaManager.databaseObjectIterator(SchemaObject.TABLE);
@@ -1259,11 +1283,11 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
         while (tables.hasNext()) {
             table = (Table) tables.next();
 
-            PersistentStore currentStore = table.getRowStore(session);
-
-            if (!table.isText() || !isAccessibleTable(session, table)) {
+            if (!table.isText()) {
                 continue;
             }
+
+            PersistentStore currentStore = table.getRowStore(session);
 
             row               = t.getEmptyRowData();
             row[itable_cat]   = database.getCatalogName().name;
@@ -1342,17 +1366,32 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
         final int used_space    = 6;
         final int used_memory   = 7;
 
+        if (!session.isAdmin()) {
+            return t;
+        }
+
+        DataSpaceManager spaceManager = null;
+        DirectoryBlockCachedObject[] directoryList =
+            new DirectoryBlockCachedObject[0];
+        int     cacheScale    = database.logger.getDataFileScale();
+        int     fileBlockSize = 1024 * 1024 * cacheScale / 16;
+        boolean hasCache      = database.logger.hasCache();
+
+        if (hasCache) {
+            DataFileCache cache = database.logger.getCache();
+
+            spaceManager  = cache.spaceManager;
+            directoryList = cache.spaceManager.getDirectoryList();
+            cacheScale    = cache.getDataFileScale();
+            fileBlockSize = spaceManager.getFileBlockSize();
+        }
+
         // Initialization
         tables = allTables();
 
         // Do it.
         while (tables.hasNext()) {
-            table = (Table) tables.next();
-
-            if (!isAccessibleTable(session, table)) {
-                continue;
-            }
-
+            table              = (Table) tables.next();
             row                = t.getEmptyRowData();
             row[table_catalog] = database.getCatalogName().name;
             row[table_schema]  = table.getSchemaName().name;
@@ -1360,13 +1399,13 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
 
             switch (table.getTableType()) {
 
-                case TableBase.INFO_SCHEMA_TABLE :
-                case TableBase.VIEW_TABLE :
-                case TableBase.TEMP_TABLE :
-                case TableBase.TEMP_TEXT_TABLE :
-                    continue;
-                default :
+                case TableBase.MEMORY_TABLE :
+                case TableBase.CACHED_TABLE :
+                case TableBase.TEXT_TABLE :
                     break;
+
+                default :
+                    continue;
             }
 
             PersistentStore tableStore = table.getRowStore(session);
@@ -1374,12 +1413,203 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
             row[cardinality] = Long.valueOf(tableStore.elementCount());
 
             if (table.isCached()) {
-                row[space_id]    = Long.valueOf(table.getSpaceID());
+                int spaceId = table.getSpaceID();
+
+                row[space_id]    = Long.valueOf(spaceId);
+                row[alloc_space] = null;
                 row[used_space]  = null;
                 row[used_memory] = null;
+
+                if (hasCache && spaceManager.isMultiSpace()
+                        && spaceId != DataSpaceManager.tableIdDefault) {
+                    long allocated = 0;
+                    long used      = 0;
+
+                    for (int i = 0; i < directoryList.length; i++) {
+                        int[] tableIdList = directoryList[i].getTableIdArray();
+                        char[] freeSpaceList =
+                            directoryList[i].getFreeSpaceArray();
+
+                        for (int j = 0; j < tableIdList.length; j++) {
+                            if (tableIdList[j] == spaceId) {
+                                allocated += fileBlockSize;
+                                used += fileBlockSize
+                                        - freeSpaceList[j] * cacheScale;
+                            }
+                        }
+                    }
+
+                    if (allocated > 0) {
+                        TableSpaceManager tableSpace =
+                            tableStore.getSpaceManager();
+
+                        used -= tableSpace.getLostBlocksSize();
+                    }
+
+                    row[alloc_space] = Long.valueOf(allocated);
+                    row[used_space]  = Long.valueOf(used);
+                }
             }
 
             t.insertSys(session, store, row);
+        }
+
+        long allocated = 0;
+        long used      = 0;
+        long empty     = 0;
+        long system    = 0;
+
+        for (int i = 0; i < directoryList.length; i++) {
+            int[]  tableIdList   = directoryList[i].getTableIdArray();
+            char[] freeSpaceList = directoryList[i].getFreeSpaceArray();
+            int[]  bitMapList    = directoryList[i].getBitmapAddressArray();
+
+            for (int j = 0; j < tableIdList.length; j++) {
+                if (tableIdList[j] == DataSpaceManager.tableIdDefault) {
+                    allocated += fileBlockSize;
+                    used      += fileBlockSize - freeSpaceList[j] * cacheScale;
+                } else if (tableIdList[j] == DataSpaceManager.tableIdEmpty
+                           && bitMapList[j] != 0) {
+                    empty += fileBlockSize;
+                } else if (tableIdList[j]
+                           == DataSpaceManager.tableIdDirectory) {
+                    system += fileBlockSize;
+                }
+            }
+        }
+
+        if (hasCache) {
+            row              = t.getEmptyRowData();
+            row[table_name]  = "UNUSED_SPACE";
+            row[alloc_space] = Long.valueOf(empty);
+            row[used_space]  = Long.valueOf(0);
+            row[space_id]    = Long.valueOf(DataSpaceManager.tableIdEmpty);
+
+            t.insertSys(session, store, row);
+
+            row              = t.getEmptyRowData();
+            row[table_name]  = "COMMON_SPACE";
+            row[alloc_space] = Long.valueOf(allocated);
+            row[used_space]  = Long.valueOf(used);
+            row[space_id]    = Long.valueOf(DataSpaceManager.tableIdDefault);
+
+            t.insertSys(session, store, row);
+
+            row              = t.getEmptyRowData();
+            row[table_name]  = "SYSTEM_SPACE";
+            row[alloc_space] = Long.valueOf(system);
+            row[used_space]  = Long.valueOf(system);
+            row[space_id]    = Long.valueOf(DataSpaceManager.tableIdDirectory);
+
+            t.insertSys(session, store, row);
+        }
+
+        return t;
+    }
+
+    /**
+     * Retrieves a <code>Table</code> object describing the visible
+     * <code>Index</code> objects for each accessible table defined
+     * within this database.<p>
+     *
+     * Each row is an index column description with the following
+     * columns: <p>
+     *
+     * <pre class="SqlCodeExample">
+     * TABLE_CATALOG    VARCHAR   table's catalog
+     * TABLE_SCHEMA     VARCHAR   simple name of table's schema
+     * TABLE_NAME       VARCHAR   simple name of the table using the index
+     * INDEX_NAME       VARCHAR   simple name of the index
+     * CARDINALITY      BIGINT    total number of rows
+     * ALLOCATED_ROWS   BIGINT    allocated row count
+     * ALLOCATED_SPACE  BIGINT    allocated bytes
+     * USED_SPACE       BIGINT    used bytes
+     * </pre> <p>
+     *
+     * @return a <code>Table</code> object describing the visible
+     *        <code>Index</code> objects for each accessible
+     *        table defined within this database.
+     */
+    final Table SYSTEM_INDEXSTATS(Session session, PersistentStore store) {
+
+        Table t = sysTables[SYSTEM_INDEXSTATS];
+
+        if (t == null) {
+            t = createBlankTable(sysTableHsqlNames[SYSTEM_INDEXSTATS]);
+
+            // JDBC
+            addColumn(t, "TABLE_CATALOG", SQL_IDENTIFIER);
+            addColumn(t, "TABLE_SCHEMA", SQL_IDENTIFIER);
+            addColumn(t, "TABLE_NAME", SQL_IDENTIFIER);    // NOT NULL
+            addColumn(t, "INDEX_NAME", SQL_IDENTIFIER);
+            addColumn(t, "CARDINALITY", CARDINAL_NUMBER);
+            addColumn(t, "ALLOCATED_ROWS", CARDINAL_NUMBER);
+            addColumn(t, "USED_SPACE", CARDINAL_NUMBER);
+            addColumn(t, "ALLOCATED_SPACE", CARDINAL_NUMBER);
+            addColumn(t, "SPACE_ID", CARDINAL_NUMBER);
+
+            // order: NON_UNIQUE, TYPE, INDEX_NAME, and ORDINAL_POSITION.
+            // added for unique: INDEX_QUALIFIER, TABLE_NAME
+            // false PK, as INDEX_QUALIFIER may be null
+            HsqlName name = HsqlNameManager.newInfoSchemaObjectName(
+                sysTableHsqlNames[SYSTEM_INDEXSTATS].name, false,
+                SchemaObject.INDEX);
+
+            t.createPrimaryKeyConstraint(name, new int[] {
+                0, 1, 2, 3
+            }, false);
+
+            return t;
+        }
+
+        // calculated column values
+        String tableCatalog;
+        String tableSchema;
+        String tableName;
+        String indexName;
+
+        // Intermediate holders
+        Iterator tables;
+        Table    table;
+        int      indexCount;
+        Object[] row;
+
+        // column number mappings
+        final int itable_cat   = 0;
+        final int itable_schem = 1;
+        final int itable_name  = 2;
+        final int iindex_name  = 3;
+
+        // Initialization
+        tables =
+            database.schemaManager.databaseObjectIterator(SchemaObject.TABLE);
+
+        // Do it.
+        while (tables.hasNext()) {
+            table = (Table) tables.next();
+
+            if (table.isView() || !isAccessibleTable(session, table)) {
+                continue;
+            }
+
+            tableCatalog = table.getCatalogName().name;
+            tableSchema  = table.getSchemaName().name;
+            tableName    = table.getName().name;
+            indexCount   = table.getIndexCount();
+
+            // process all of the visible indices for this table
+            for (int i = 0; i < indexCount; i++) {
+                Index index = table.getIndex(i);
+
+                indexName         = index.getName().name;
+                row               = t.getEmptyRowData();
+                row[itable_cat]   = tableCatalog;
+                row[itable_schem] = tableSchema;
+                row[itable_name]  = tableName;
+                row[iindex_name]  = indexName;
+
+                t.insertSys(session, store, row);
+            }
         }
 
         return t;
@@ -4911,7 +5141,7 @@ extends org.hsqldb.dbinfo.DatabaseInformationMain {
             addColumn(t, "IS_GRANTABLE", YES_OR_NO);     // not null
 
             HsqlName name = HsqlNameManager.newInfoSchemaObjectName(
-                sysTableHsqlNames[ROLE_TABLE_GRANTS].name, false,
+                sysTableHsqlNames[ROLE_UDT_GRANTS].name, false,
                 SchemaObject.INDEX);
 
             t.createPrimaryKeyConstraint(name, null, false);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,7 +46,7 @@ import org.hsqldb.lib.ObjectComparator;
  * Special getOrAddXXX() methods are used for object maps in some subclasses.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.7.2
  */
 public class BaseHashMap {
@@ -458,8 +458,7 @@ public class BaseHashMap {
     }
 
     /**
-     * generic method for adding or removing key / values in multi-value
-     * maps
+     * Generic method for adding or removing key / values in multi-value maps.
      */
     protected Object addOrRemoveMultiVal(long longKey, long longValue,
                                          Object objectKey, Object objectValue,
@@ -824,9 +823,9 @@ public class BaseHashMap {
         for (; lookup >= 0;
                 lastLookup = lookup,
                 lookup = hashIndex.getNextLookup(lookup)) {
-            returnValue = objectKeyTable[lookup];
+            if (comparator.longKey(objectKeyTable[lookup]) == longKey) {
+                returnValue = objectKeyTable[lookup];
 
-            if (comparator.longKey(returnValue) == longKey) {
                 break;
             }
         }
@@ -1261,7 +1260,7 @@ public class BaseHashMap {
      */
     public int getAccessCountCeiling(int count, int margin) {
         return ArrayCounter.rank(accessTable, hashIndex.newNodePointer, count,
-                                 accessMin + 1, accessCount, margin);
+                                 accessMin, accessCount, margin);
     }
 
     /**
@@ -1308,21 +1307,22 @@ public class BaseHashMap {
             return;
         }
 
-        if (accessMin < Integer.MAX_VALUE - (1 << 24)) {
-            accessMin = Integer.MAX_VALUE - (1 << 24);
+        int    i      = accessTable.length;
+        double factor = (double) accessMin / accessCount;
+
+        if (factor < 0.5) {
+            factor = 0.5;
         }
 
-        int i = accessTable.length;
-
         while (--i >= 0) {
-            if (accessTable[i] <= accessMin) {
+            if (accessTable[i] < accessMin) {
                 accessTable[i] = 0;
             } else {
-                accessTable[i] -= accessMin;
+                accessTable[i] = (int) ((accessTable[i] - accessMin) * factor);
             }
         }
 
-        accessCount -= accessMin;
+        accessCount = (int) ((accessCount - accessMin) * factor);
         accessMin   = 0;
     }
 
@@ -1484,6 +1484,7 @@ public class BaseHashMap {
         int     lookup = -1;
         int     counter;
         boolean removed;
+        Object  oldKey;
 
         public MultiValueKeyIterator() {
             toNextLookup();
@@ -1510,6 +1511,7 @@ public class BaseHashMap {
 
             toNextLookup();
 
+            oldKey = value;
             return value;
         }
 
@@ -1522,7 +1524,7 @@ public class BaseHashMap {
         }
 
         public void remove() throws NoSuchElementException {
-            throw new NoSuchElementException("Hash Iterator");
+            addOrRemoveMultiVal(0, 0, oldKey, null, true, false);
         }
 
         public void setValue(Object value) {

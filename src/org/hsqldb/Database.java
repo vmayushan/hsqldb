@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,7 +61,7 @@ import org.hsqldb.types.Collation;
  * It holds the data structures that form an HSQLDB database instance.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class Database {
@@ -832,22 +832,23 @@ public class Database {
 
         public void run() {
 
-            try {
-                Session sysSession = sessionManager.newSysSession();
-                Statement checkpoint =
-                    ParserCommand.getAutoCheckpointStatement(Database.this);
+            Statement checkpoint =
+                ParserCommand.getAutoCheckpointStatement(Database.this);
+            Session sysSession = sessionManager.newSysSession();
 
+            try {
                 sysSession.executeCompiledStatement(checkpoint,
                                                     ValuePool.emptyObjectArray,
                                                     0);
-                sysSession.commit(false);
-                sysSession.close();
-
-                waiting = false;
             } catch (Throwable e) {
 
                 // ignore exceptions
                 // may be InterruptedException or IOException
+            } finally {
+                sysSession.commit(false);
+                sysSession.close();
+
+                waiting = false;
             }
         }
 

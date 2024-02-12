@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,7 +58,7 @@ import org.hsqldb.types.Type;
  * Base implementation of PersistentStore for different table types.
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 1.9.0
  */
 public abstract class RowStoreAVL implements PersistentStore {
@@ -82,6 +82,14 @@ public abstract class RowStoreAVL implements PersistentStore {
 
     //
     PersistentStore[] subStores = PersistentStore.emptyArray;
+
+    public boolean isRowStore() {
+        return true;
+    }
+
+    public boolean isRowSet() {
+        return false;
+    }
 
     public TableBase getTable() {
         return table;
@@ -107,7 +115,17 @@ public abstract class RowStoreAVL implements PersistentStore {
 
     public abstract CachedObject get(CachedObject object, boolean keep);
 
+    public CachedObject getRow(long key, boolean[] usedColumnCheck) {
+        return get(key, false);
+    }
+
+    public int compare(Session session, long key) {
+        throw Error.runtimeError(ErrorCode.U_S0500, "RowStoreAVL");
+    }
+
     public abstract void add(Session session, CachedObject object, boolean tx);
+
+    public final void add(CachedObject object, boolean keep) {}
 
     public boolean canRead(Session session, long pos, int mode, int[] colMap) {
         return true;
@@ -148,7 +166,7 @@ public abstract class RowStoreAVL implements PersistentStore {
 
     public abstract void commitPersistence(CachedObject object);
 
-    public void postCommitAction(Session session, RowAction action) {}
+    public abstract void postCommitAction(Session session, RowAction action);
 
     public abstract DataFileCache getCache();
 
@@ -183,8 +201,6 @@ public abstract class RowStoreAVL implements PersistentStore {
      * Basic delete with no logging or referential checks.
      */
     public void delete(Session session, Row row) {
-
-        row = (Row) get(row, false);
 
         for (int i = 0; i < indexList.length; i++) {
             indexList[i].delete(session, this, row);
@@ -256,6 +272,18 @@ public abstract class RowStoreAVL implements PersistentStore {
             remove(row);
 
             throw e;
+        } catch (Throwable t) {
+            int count = i;
+
+            i = 0;
+
+            // unique index violation - rollback insert
+            for (; i < count; i++) {
+                indexList[i].delete(session, this, row);
+            }
+
+            // do not remove as there may be still be reference
+            throw Error.error(ErrorCode.GENERAL_ERROR, t);
         }
     }
 
@@ -331,7 +359,7 @@ public abstract class RowStoreAVL implements PersistentStore {
         } else if (diff == -1) {
             limit = keys.length;
         } else if (diff == 0) {
-            throw Error.runtimeError(ErrorCode.U_S0500, "RowStoreAVL");
+            return;
         } else if (diff == 1) {
 
             //
@@ -383,6 +411,10 @@ public abstract class RowStoreAVL implements PersistentStore {
 
     public synchronized double searchCost(Session session, Index index,
                                           int count, int opType) {
+
+        if (count == 0) {
+            return elementCount.get();
+        }
 
         if (opType != OpTypes.EQUAL) {
             return elementCount.get() / 2.0;
@@ -545,7 +577,7 @@ public abstract class RowStoreAVL implements PersistentStore {
                     }
                 }
             }
-        } catch (java.lang.OutOfMemoryError e) {
+        } catch (OutOfMemoryError e) {
             throw Error.error(ErrorCode.OUT_OF_MEMORY);
         }
     }
@@ -565,6 +597,10 @@ public abstract class RowStoreAVL implements PersistentStore {
     }
 
     public void setReadOnly(boolean readOnly) {}
+
+    public void readLock() {}
+
+    public void readUnlock() {}
 
     public void writeLock() {}
 
@@ -613,7 +649,7 @@ public abstract class RowStoreAVL implements PersistentStore {
             it.release();
 
             return true;
-        } catch (java.lang.OutOfMemoryError e) {
+        } catch (OutOfMemoryError e) {
             error = Error.error(ErrorCode.OUT_OF_MEMORY);
         } catch (HsqlException e) {
             error = e;

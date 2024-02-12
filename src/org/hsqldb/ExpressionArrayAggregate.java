@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,7 +46,7 @@ import org.hsqldb.types.Type;
  * Implementation of array aggregate operations
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.0
+ * @version 2.3.3
  * @since 2.0.1
  */
 public class ExpressionArrayAggregate extends Expression {
@@ -177,6 +177,11 @@ public class ExpressionArrayAggregate extends Expression {
 
         unresolvedSet.add(this);
 
+        if (rangeGroup.getRangeVariables().length > 0) {
+            this.rangeGroups = rangeGroups;
+            this.rangeGroup  = rangeGroup;
+        }
+
         return unresolvedSet;
     }
 
@@ -289,6 +294,10 @@ public class ExpressionArrayAggregate extends Expression {
 
             case OpTypes.MEDIAN :
                 currentVal = nodes[0].getValue(session);
+
+                if (currentVal == null) {
+                    return currValue;
+                }
                 break;
         }
 

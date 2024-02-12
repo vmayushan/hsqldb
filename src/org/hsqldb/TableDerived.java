@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -155,6 +155,8 @@ public class TableDerived extends Table {
             p.reset(sql);
             p.read();
 
+            p.compileContext.setCurrentSubquery(tableName.name);
+
             td = p.XreadSubqueryTableBody(tableName, OpTypes.TABLE_SUBQUERY);
 
             td.queryExpression.resolve(session);
@@ -259,7 +261,7 @@ public class TableDerived extends Table {
         return dataExpression;
     }
 
-    public void prepareTable() {
+    public void prepareTable(Session session) {
 
         if (columnCount > 0) {
             return;
@@ -268,7 +270,7 @@ public class TableDerived extends Table {
         if (dataExpression != null) {
             if (columnCount == 0) {
                 TableUtil.addAutoColumns(this, dataExpression.nodeDataTypes);
-                setTableIndexesForSubquery();
+                setTableIndexesForSubquery(session);
             }
         }
 
@@ -276,13 +278,13 @@ public class TableDerived extends Table {
             columnList  = queryExpression.getColumns();
             columnCount = queryExpression.getColumnCount();
 
-            setTableIndexesForSubquery();
+            setTableIndexesForSubquery(session);
         }
     }
 
-    public void prepareTable(HsqlName[] columns) {
+    public void prepareTable(Session session, HsqlName[] columns) {
 
-        prepareTable();
+        prepareTable(session);
 
         if (columns != null) {
             if (columns.length != columnList.size()) {
@@ -299,7 +301,7 @@ public class TableDerived extends Table {
         }
     }
 
-    private void setTableIndexesForSubquery() {
+    private void setTableIndexesForSubquery(Session session) {
 
         int[] cols = null;
 
@@ -312,14 +314,12 @@ public class TableDerived extends Table {
         int pkcols[] = uniqueRows ? cols
                                   : null;
 
-        if (primaryKeyCols == null) {
-            createPrimaryKey(null, pkcols, false);
-        }
+        createPrimaryKey(null, pkcols, false);
 
         if (uniqueRows) {
             fullIndex = getPrimaryIndex();
         } else if (uniquePredicate) {
-            fullIndex = createIndexForColumns(null, cols);
+            fullIndex = createIndexForColumns(session, cols);
         }
     }
 

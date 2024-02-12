@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,6 +34,7 @@ package org.hsqldb;
 import org.hsqldb.error.Error;
 import org.hsqldb.error.ErrorCode;
 import org.hsqldb.index.Index;
+import org.hsqldb.lib.HsqlList;
 import org.hsqldb.lib.OrderedHashSet;
 import org.hsqldb.lib.OrderedIntHashSet;
 import org.hsqldb.navigator.RowIterator;
@@ -43,9 +44,10 @@ import org.hsqldb.types.DTIType;
 import org.hsqldb.types.DateTimeType;
 import org.hsqldb.types.NumberType;
 import org.hsqldb.types.Type;
+import org.hsqldb.types.Types;
 
 /**
- * @author Campbell Boucher-Burnet (boucherb@users dot sourceforge.net)
+ * @author Campbell Burnet (boucherb@users dot sourceforge.net)
  * @author Fred Toussi (fredt@users dot sourceforge.net)
  * @version 2.2.9
  * @since 1.9.0
@@ -55,9 +57,6 @@ public class ExpressionLogical extends Expression {
     boolean noOptimisation;
     boolean isQuantified;
     boolean isTerminal;
-
-    //
-    RangeVariable[] rangeArray = RangeVariable.emptyArray;
 
     /**
      * For LIKE
@@ -902,8 +901,8 @@ public class ExpressionLogical extends Expression {
                 throw Error.error(ErrorCode.X_42567);
             }
 
-            if (nodes[LEFT].dataType.typeComparisonGroup
-                    != nodes[RIGHT].dataType.typeComparisonGroup) {
+            if (!nodes[LEFT].dataType.canCompareDirect(
+                    nodes[RIGHT].dataType)) {
                 if (convertDateTimeLiteral(session, nodes[LEFT],
                                            nodes[RIGHT])) {
 
@@ -984,6 +983,19 @@ public class ExpressionLogical extends Expression {
             if (nodes[LEFT].opType == OpTypes.VALUE
                     && nodes[RIGHT].opType == OpTypes.VALUE) {
                 setAsConstantValue(session, parent);
+            } else if (session.database.sqlSyntaxDb2) {
+                if (nodes[LEFT].dataType.typeComparisonGroup
+                        == Types.SQL_VARCHAR) {
+                    if (nodes[LEFT].opType == OpTypes.VALUE) {
+                        nodes[RIGHT].dataType.convertToTypeLimits(session,
+                                nodes[LEFT].valueData);
+                    }
+
+                    if (nodes[RIGHT].opType == OpTypes.VALUE) {
+                        nodes[LEFT].dataType.convertToTypeLimits(session,
+                                nodes[RIGHT].valueData);
+                    }
+                }
             }
         }
     }
@@ -1142,7 +1154,7 @@ public class ExpressionLogical extends Expression {
 
         if (nodes[RIGHT].opType == OpTypes.VALUELIST) {
             nodes[RIGHT].prepareTable(session, nodes[LEFT], degree);
-            nodes[RIGHT].table.prepareTable();
+            nodes[RIGHT].table.prepareTable(session);
         }
 
         // encounterd in system generated MATCH predicates
@@ -1766,7 +1778,7 @@ public class ExpressionLogical extends Expression {
                 }
 
                 if (opType == OpTypes.NOT_EQUAL) {
-                    it = index.firstRow(session, store, 0);
+                    it = index.firstRow(session, store, 0, null);
                 } else {
                     it = index.findFirstRowNotNull(session, store);
                 }
@@ -1778,7 +1790,7 @@ public class ExpressionLogical extends Expression {
                 }
 
                 firstdata = firstrow.getData();
-                lastrow   = index.lastRow(session, store, 0).getNextRow();
+                lastrow = index.lastRow(session, store, 0, null).getNextRow();
                 lastdata  = lastrow.getData();
 
                 Boolean comparefirst = compareValues(session, data, firstdata);
@@ -1823,7 +1835,7 @@ public class ExpressionLogical extends Expression {
                     return null;
                 }
 
-                it        = index.firstRow(session, store, 0);
+                it        = index.firstRow(session, store, 0, null);
                 firstrow  = it.getNextRow();
                 firstdata = firstrow.getData();
 
@@ -1851,7 +1863,7 @@ public class ExpressionLogical extends Expression {
                                         : Boolean.TRUE;
                 }
 
-                lastrow  = index.lastRow(session, store, 0).getNextRow();
+                lastrow  = index.lastRow(session, store, 0, null).getNextRow();
                 lastdata = lastrow.getData();
 
                 Boolean comparefirst = compareValues(session, data, firstdata);
@@ -2214,17 +2226,11 @@ public class ExpressionLogical extends Expression {
         return false;
     }
 
-    RangeVariable[] getJoinRangeVariables(RangeVariable[] ranges) {
+    void getJoinRangeVariables(RangeVariable[] ranges, HsqlList list) {
 
-        OrderedHashSet set = collectRangeVariables(ranges, null);
-
-        if (set != null) {
-            rangeArray = new RangeVariable[set.size()];
-
-            set.toArray(rangeArray);
+        for (int i = 0; i < nodes.length; i++) {
+            nodes[i].getJoinRangeVariables(ranges, list);
         }
-
-        return rangeArray;
     }
 
     double costFactor(Session session, RangeVariable rangeVar, int operation) {

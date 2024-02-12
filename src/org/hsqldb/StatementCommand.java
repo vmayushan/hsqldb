@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,7 @@ import org.hsqldb.scriptio.ScriptWriterText;
  * Implementation of Statement for SQL commands.<p>
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class StatementCommand extends Statement {
@@ -112,7 +112,12 @@ public class StatementCommand extends Statement {
                 break;
             }
             case StatementTypes.DATABASE_BACKUP :
-                group    = StatementTypes.X_HSQLDB_DATABASE_OPERATION;
+                group = StatementTypes.X_HSQLDB_DATABASE_OPERATION;
+
+                if (writeNames.length == 0) {
+                    group = StatementTypes.X_HSQLDB_NONBLOCK_OPERATION;
+                }
+
                 isLogged = false;
                 break;
 
@@ -129,7 +134,6 @@ public class StatementCommand extends Statement {
             case StatementTypes.SET_DATABASE_DEFAULT_TABLE_TYPE :
             case StatementTypes.SET_DATABASE_FILES_CACHE_ROWS :
             case StatementTypes.SET_DATABASE_FILES_CACHE_SIZE :
-            case StatementTypes.SET_DATABASE_FILES_CHECK :
             case StatementTypes.SET_DATABASE_FILES_SCALE :
             case StatementTypes.SET_DATABASE_FILES_SPACE :
             case StatementTypes.SET_DATABASE_FILES_DEFRAG :
@@ -158,6 +162,11 @@ public class StatementCommand extends Statement {
                 group = StatementTypes.X_HSQLDB_SETTING;
                 break;
 
+            case StatementTypes.SET_DATABASE_FILES_CHECK :
+                group    = StatementTypes.X_HSQLDB_SETTING;
+                isLogged = false;
+                break;
+
             case StatementTypes.SET_TABLE_CLUSTERED :
             case StatementTypes.SET_TABLE_NEW_TABLESPACE :
             case StatementTypes.SET_TABLE_SET_TABLESPACE :
@@ -165,9 +174,10 @@ public class StatementCommand extends Statement {
                 break;
 
             case StatementTypes.SET_TABLE_SOURCE_HEADER :
+                group    = StatementTypes.X_HSQLDB_SCHEMA_MANIPULATION;
                 isLogged = false;
+                break;
 
-            // fall through
             case StatementTypes.SET_TABLE_SOURCE :
                 group = StatementTypes.X_HSQLDB_SCHEMA_MANIPULATION;
                 break;
@@ -361,11 +371,15 @@ public class StatementCommand extends Statement {
             }
             case StatementTypes.SET_DATABASE_FILES_CHECK : {
                 try {
-                    int value = ((Integer) parameters[0]).intValue();
+                    long value1 = ((Long) parameters[0]).longValue();
+                    long value2 = ((Long) parameters[1]).longValue();
 
                     session.checkAdmin();
                     session.checkDDLWrite();
-                    session.database.logger.setFilesCheck(value);
+
+                    if (session.isProcessingScript()) {
+                        session.database.logger.setFilesTimestamp(value1);
+                    }
 
                     return Result.updateZeroResult;
                 } catch (HsqlException e) {
@@ -898,9 +912,8 @@ public class StatementCommand extends Statement {
                 try {
                     HsqlName name = (HsqlName) parameters[0];
                     Table table =
-                        session.database.schemaManager.getTable(session,
+                        session.database.schemaManager.getUserTable(session,
                             name.name, name.schema.name);
-                    DataFileCache cache = session.database.logger.getCache();
 
                     session.checkAdmin();
                     session.checkDDLWrite();
@@ -917,6 +930,8 @@ public class StatementCommand extends Statement {
                             != DataSpaceManager.tableIdDefault) {
                         return Result.updateZeroResult;
                     }
+
+                    DataFileCache cache = session.database.logger.getCache();
 
                     // memory database
                     if (cache == null) {
@@ -950,19 +965,14 @@ public class StatementCommand extends Statement {
                     HsqlName name    = (HsqlName) parameters[0];
                     int      spaceid = ((Integer) parameters[1]).intValue();
                     Table table =
-                        session.database.schemaManager.getTable(session,
+                        session.database.schemaManager.getUserTable(session,
                             name.name, name.schema.name);
-                    DataFileCache cache = session.database.logger.getCache();
 
                     if (!session.isProcessingScript()) {
                         return Result.updateZeroResult;
                     }
 
                     if (table.getTableType() != TableBase.CACHED_TABLE) {
-                        return Result.updateZeroResult;
-                    }
-
-                    if (cache == null) {
                         return Result.updateZeroResult;
                     }
 
@@ -973,12 +983,21 @@ public class StatementCommand extends Statement {
 
                     table.setSpaceID(spaceid);
 
+                    if (table.store == null) {
+                        return Result.updateZeroResult;
+                    }
+
+                    DataFileCache cache = session.database.logger.getCache();
+
+                    if (cache == null) {
+                        return Result.updateZeroResult;
+                    }
+
                     DataSpaceManager dataSpace = cache.spaceManager;
                     TableSpaceManager tableSpace =
-                        dataSpace.getTableSpace(spaceid);
-                    PersistentStore store = table.getRowStore(session);
+                        dataSpace.getTableSpace(table.getSpaceID());
 
-                    store.setSpaceManager(tableSpace);
+                    table.store.setSpaceManager(tableSpace);
 
                     return Result.updateZeroResult;
                 } catch (HsqlException e) {
@@ -990,7 +1009,7 @@ public class StatementCommand extends Statement {
                     HsqlName name     = (HsqlName) parameters[0];
                     int[]    colIndex = (int[]) parameters[1];
                     Table table =
-                        session.database.schemaManager.getTable(session,
+                        session.database.schemaManager.getUserTable(session,
                             name.name, name.schema.name);
 
                     StatementSchema.checkSchemaUpdateAuthorisation(session,
@@ -1022,7 +1041,7 @@ public class StatementCommand extends Statement {
                     HsqlName name  = (HsqlName) parameters[0];
                     String   value = (String) parameters[1];
                     Table table =
-                        session.database.schemaManager.getTable(session,
+                        session.database.schemaManager.getUserTable(session,
                             name.name, name.schema.name);
 
                     if (session.isProcessingScript()) {
@@ -1038,7 +1057,7 @@ public class StatementCommand extends Statement {
                 try {
                     HsqlName name = (HsqlName) parameters[0];
                     Table table =
-                        session.database.schemaManager.getTable(session,
+                        session.database.schemaManager.getUserTable(session,
                             name.name, name.schema.name);
                     boolean mode = ((Boolean) parameters[1]).booleanValue();
 
@@ -1057,7 +1076,7 @@ public class StatementCommand extends Statement {
                 try {
                     HsqlName name = (HsqlName) parameters[0];
                     Table table =
-                        session.database.schemaManager.getTable(session,
+                        session.database.schemaManager.getUserTable(session,
                             name.name, name.schema.name);
 
                     StatementSchema.checkSchemaUpdateAuthorisation(session,
@@ -1126,14 +1145,20 @@ public class StatementCommand extends Statement {
                         session.database.schemaManager.getUserTable(session,
                             name.name, name.schema.name);
 
-                    if (name.schema != SqlInvariants.LOBS_SCHEMA_HSQLNAME) {
-                        StatementSchema.checkSchemaUpdateAuthorisation(session,
-                                table.getSchemaName());
+                    if (table.getTableType() == type) {
+                        return Result.updateZeroResult;
                     }
 
-                    TableWorks tw = new TableWorks(session, table);
+                    StatementSchema.checkSchemaUpdateAuthorisation(session,
+                            table.getSchemaName());
 
-                    tw.setTableType(session, type);
+                    TableWorks tw     = new TableWorks(session, table);
+                    boolean    result = tw.setTableType(session, type);
+
+                    if (!result) {
+                        throw Error.error(ErrorCode.GENERAL_IO_ERROR);
+                    }
+
                     session.database.schemaManager.setSchemaChangeTimestamp();
 
                     if (name.schema == SqlInvariants.LOBS_SCHEMA_HSQLNAME) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,7 +36,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 
-/* $Id: ClosableByteArrayOutputStream.java 5221 2013-03-30 10:57:58Z fredt $ */
+/* $Id: ClosableByteArrayOutputStream.java 5437 2015-03-09 23:45:20Z fredt $ */
 
 /**
  * @todo - finer-grained synchronization to reduce average

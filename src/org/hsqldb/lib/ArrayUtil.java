@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,7 @@ import java.lang.reflect.Array;
  * Collection of static methods for operations on arrays
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.7.2
  */
 public class ArrayUtil {
@@ -181,7 +181,7 @@ public class ArrayUtil {
     public static void adjustArray(int type, Object array, int usedElements,
                                    int index, int count) {
 
-        if (index >= usedElements) {
+        if (index >= usedElements || count == 0) {
             return;
         }
 
@@ -1684,6 +1684,19 @@ public class ArrayUtil {
     }
 
     /**
+     * returns the largest value that is a power of 2 and larger or equal to value
+     */
+    public static long getBinaryNormalisedCeiling(long value) {
+
+        long newSize = 2;
+
+        while (newSize < value) {
+            newSize <<= 1;
+        }
+
+        return newSize;
+    }
+    /**
      * returns true if log2 n is in the range (0, max)
      */
     public static boolean isTwoPower(int n, int max) {
@@ -1704,6 +1717,20 @@ public class ArrayUtil {
      */
     public static int getTwoPowerFloor(int n) {
 
+        int shift = getTwoPowerScale(n);
+
+        if (shift == 0) {
+            return 0;
+        }
+
+        return 1 << shift;
+    }
+
+    /**
+     * returns the log2 of largest value that is 0 or a power of 2 and is smaller or equal to n
+     */
+    public static int getTwoPowerScale(int n) {
+
         int shift = 0;
 
         if (n == 0) {
@@ -1718,6 +1745,6 @@ public class ArrayUtil {
             n >>= 1;
         }
 
-        return 1 << shift;
+        return shift;
     }
 }

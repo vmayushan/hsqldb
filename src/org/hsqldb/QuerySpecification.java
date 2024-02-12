@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2014, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,7 +65,7 @@ import org.hsqldb.types.Types;
  *
  * @author Fred Toussi (fredt@users dot sourceforge.net)
  *
- * @version 2.3.2
+ * @version 2.3.3
  * @since 1.9.0
  */
 public class QuerySpecification extends QueryExpression {
@@ -199,6 +199,10 @@ public class QuerySpecification extends QueryExpression {
 
     public RangeVariable[] getRangeVariables() {
         return rangeVariables;
+    }
+
+    public int getCurrentRangeVariableCount() {
+        return rangeVariableList.size();
     }
 
     // range variable sub queries are resolves fully
@@ -692,6 +696,7 @@ public class QuerySpecification extends QueryExpression {
                         isAggregated = true;
 
                         expression.setAggregate();
+                        e.setCorrelatedReferences(this);
                     }
 
                     if (resolvedSubqueryExpressions == null) {
@@ -1012,9 +1017,10 @@ public class QuerySpecification extends QueryExpression {
 
     private void setRangeVariableConditions(Session session) {
 
-        RangeVariableResolver rangeResolver = new RangeVariableResolver(this);
+        RangeVariableResolver rangeResolver =
+            new RangeVariableResolver(session, this);
 
-        rangeResolver.processConditions(session);
+        rangeResolver.processConditions();
 
         rangeVariables = rangeResolver.rangeVariables;
     }
@@ -1209,6 +1215,8 @@ public class QuerySpecification extends QueryExpression {
         // - references to table / correlation and column list in correlation
         //   names are handled according to the Standard
         //  fredt@users
+        OrderedHashSet extraSet = null;
+
         tempSet.clear();
 
         if (isGrouped) {
@@ -1233,9 +1241,15 @@ public class QuerySpecification extends QueryExpression {
                 }
             }
 
-            if (!tempSet.isEmpty() && !resolveForGroupBy(tempSet)) {
-                throw Error.error(ErrorCode.X_42574,
-                                  ((Expression) tempSet.get(0)).getSQL());
+            if (!tempSet.isEmpty()) {
+                if (!resolveForGroupBy(tempSet)) {
+                    throw Error.error(ErrorCode.X_42574,
+                                      ((Expression) tempSet.get(0)).getSQL());
+                }
+
+                extraSet = new OrderedHashSet();
+
+                extraSet.addAll(tempSet);
             }
         } else if (isAggregated) {
             for (int i = 0; i < indexLimitVisible; i++) {
@@ -1243,10 +1257,17 @@ public class QuerySpecification extends QueryExpression {
                     tempSet, Expression.columnExpressionSet,
                     Expression.aggregateFunctionSet);
 
-                if (!tempSet.isEmpty()) {
-                    throw Error.error(ErrorCode.X_42574,
-                                      ((Expression) tempSet.get(0)).getSQL());
+                for (int j = 0; j < tempSet.size(); j++) {
+                    Expression e = (Expression) tempSet.get(j);
+
+                    for (int k = 0; k < rangeVariables.length; k++) {
+                        if (rangeVariables[k] == e.getRangeVariable()) {
+                            throw Error.error(ErrorCode.X_42574, e.getSQL());
+                        }
+                    }
                 }
+
+                tempSet.clear();
             }
         }
 
@@ -1260,6 +1281,10 @@ public class QuerySpecification extends QueryExpression {
             for (int i = indexLimitVisible;
                     i < indexLimitVisible + groupByColumnCount; i++) {
                 tempSet.add(exprColumns[i]);
+            }
+
+            if (extraSet != null) {
+                tempSet.addAll(extraSet);
             }
 
             if (!havingCondition.isComposedOf(
@@ -1485,9 +1510,21 @@ public class QuerySpecification extends QueryExpression {
             PersistentStore store = table.getRowStore(session);
             long            count = store.elementCount(session);
 
-            data[0] = data[indexStartAggregates] = ValuePool.getLong(count);
+            data[indexStartAggregates] = ValuePool.getLong(count);
 
             navigator.add(data);
+            navigator.reset();
+            session.sessionContext.setRangeIterator(navigator);
+
+            if (navigator.next()) {
+                data = navigator.getCurrent();
+
+                for (int i = 0; i < indexStartAggregates; i++) {
+                    data[i] = exprColumns[i].getValue(session);
+                }
+            }
+
+            session.sessionContext.unsetRangeIterator(navigator);
 
             return result;
         }

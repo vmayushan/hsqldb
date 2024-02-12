@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011, The HSQL Development Group
+/* Copyright (c) 2001-2015, The HSQL Development Group
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,7 @@ import org.hsqldb.persist.PersistentStore;
  * Represents the chain of insert / delete / rollback / commit actions on a row.
  *
  * @author Fred Toussi (fredt@users dot sourceforge dot net)
- * @version 2.3.2
+ * @version 2.3.3
  * @since 2.0.0
  */
 public class RowAction extends RowActionBase {
@@ -49,8 +49,8 @@ public class RowAction extends RowActionBase {
     //
     final TableBase       table;
     final PersistentStore store;
-    Row                   memoryRow;
-    long                  rowId;
+    final Row             memoryRow;
+    final long            rowId;
     boolean               isMemory;
     RowAction             updatedAction;
 
@@ -379,6 +379,14 @@ public class RowAction extends RowActionBase {
         return false;
     }
 
+    public boolean isDeleteComplete() {
+        return deleteComplete;
+    }
+
+    public void setDeleteComplete() {
+        deleteComplete = true;
+    }
+
     /**
      * returns type of commit performed on timestamp. ACTION_NONE if none.
      * assumes rolled-back actions have already been merged
@@ -548,12 +556,12 @@ public class RowAction extends RowActionBase {
         return result;
     }
 
-    public synchronized long getPos() {
+    public long getPos() {
         return rowId;
     }
 
-    synchronized void setPos(long pos) {
-        rowId = pos;
+    public Row getRow() {
+        return memoryRow;
     }
 
     private int getRollbackType(Session session) {
@@ -675,7 +683,7 @@ public class RowAction extends RowActionBase {
         }
 
         do {
-            boolean expired = false;;
+            boolean expired = false;
 
             if (action.commitTimestamp != 0) {
                 if (action.commitTimestamp <= timestamp) {
